@@ -1,18 +1,93 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
-if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required");
+const requiredEnv = [
+  "DATABASE_URL",
+  "ADMIN_EMAIL",
+  "ADMIN_PASSWORD",
+  "JWT_SECRET",
+];
+const missingEnv = requiredEnv.filter((key) => !process.env[key]);
+if (missingEnv.length)
+  throw new Error(
+    `Missing required environment variables: ${missingEnv.join(", ")}`,
+  );
 const sql = neon(process.env.DATABASE_URL),
   app = express();
-app.use(cors());
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  process.env.CLIENT_URL,
+].filter(Boolean);
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin))
+        return callback(null, true);
+      return callback(new Error("Not allowed by CORS"));
+    },
+  }),
+);
 app.use(express.json({ limit: "5mb" }));
+app.get("/", (_req, res) => {
+  res.json({ success: true, message: "OBRANO Academy API is running" });
+});
+const signToken = (payload) => {
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = createHmac("sha256", process.env.JWT_SECRET)
+    .update(body)
+    .digest("base64url");
+  return `${body}.${signature}`;
+};
+const validToken = (token) => {
+  try {
+    const [body, signature] = token.split(".");
+    const expected = createHmac("sha256", process.env.JWT_SECRET)
+      .update(body)
+      .digest("base64url");
+    if (
+      signature.length !== expected.length ||
+      !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
+    )
+      return false;
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString());
+    return payload.exp > Date.now();
+  } catch {
+    return false;
+  }
+};
+app.use("/api", (req, res, next) => {
+  if (req.path === "/health" || req.path === "/auth/login") return next();
+  const token = req.headers.authorization?.replace(/^Bearer\s+/i, "");
+  if (!token || !validToken(token))
+    return res.status(401).json({ error: "Avtorizatsiya talab qilinadi" });
+  next();
+});
+app.post("/api/auth/login", (req, res) => {
+  const email = String(req.body.email || "")
+    .trim()
+    .toLowerCase();
+  const password = String(req.body.password || "");
+  const emailOk = email === process.env.ADMIN_EMAIL.trim().toLowerCase();
+  const passwordBuffer = Buffer.from(password);
+  const expectedBuffer = Buffer.from(process.env.ADMIN_PASSWORD);
+  const passwordOk =
+    passwordBuffer.length === expectedBuffer.length &&
+    timingSafeEqual(passwordBuffer, expectedBuffer);
+  if (!emailOk || !passwordOk)
+    return res.status(401).json({ error: "Login yoki parol noto‘g‘ri" });
+  res.json({
+    token: signToken({ sub: email, exp: Date.now() + 12 * 60 * 60 * 1000 }),
+  });
+});
 const dateOnly = (value) => {
   if (!value) return null;
   if (typeof value === "string") return value.slice(0, 10);
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(
     2,
-    "0"
+    "0",
   )}-${String(value.getDate()).padStart(2, "0")}`;
 };
 const studentOut = (r) => ({
@@ -279,7 +354,7 @@ app.put("/api/attendance", async (req, res, next) => {
       (r) =>
         sql`insert into attendance_records(session_id,student_id,status,note) values(${
           session.id
-        },${r.studentId},${r.status},${r.note || ""})`
+        },${r.studentId},${r.status},${r.note || ""})`,
     );
     await sql.transaction([
       sql`delete from attendance_records where session_id=${session.id}`,
@@ -307,8 +382,8 @@ const addMonth = (date) => {
   next.setDate(
     Math.min(
       day,
-      new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate()
-    )
+      new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate(),
+    ),
   );
   return dateOnly(next);
 };
@@ -326,7 +401,7 @@ const sendTelegram = async (text) => {
           text,
           parse_mode: "HTML",
         }),
-      }
+      },
     );
     if (!response.ok) throw new Error(`Telegram ${response.status}`);
     return { sent: true, error: null };
@@ -348,20 +423,20 @@ const checkPaymentReminders = async () => {
     if (today < startDate || today > dueDate) continue;
     const daysLeft = Math.round(
       (new Date(`${dueDate}T00:00:00`) - new Date(`${today}T00:00:00`)) /
-        86400000
+        86400000,
     );
     const key = `payment_due:${student.id}:${dueDate}:${today}`;
     const title =
       daysLeft === 0
         ? "To‘lov muddati bugun"
         : daysLeft === 1
-        ? "To‘lov muddati ertaga"
-        : "To‘lov muddatiga 2 kun qoldi";
+          ? "To‘lov muddati ertaga"
+          : "To‘lov muddatiga 2 kun qoldi";
     const debt = Math.max(0, Number(student.fee) - Number(student.amount));
     const message = `${student.first_name} ${student.last_name} (${
       student.phone
     }) · muddat: ${dueDate} · oylik: ${Number(student.fee).toLocaleString(
-      "uz-UZ"
+      "uz-UZ",
     )} so‘m · qarz: ${debt.toLocaleString("uz-UZ")} so‘m`;
     const inserted =
       await sql`insert into notifications(type,student_id,title,message,due_date,dedupe_key) values('payment_due',${student.id},${title},${message},${dueDate},${key}) on conflict(dedupe_key) do nothing returning id`;
@@ -389,7 +464,7 @@ app.get("/api/notifications", async (_req, res, next) => {
         telegramSent: r.telegram_sent,
         telegramError: r.telegram_error,
         createdAt: r.created_at,
-      }))
+      })),
     );
   } catch (e) {
     next(e);
@@ -413,7 +488,7 @@ app.post("/api/notifications/check", async (_req, res, next) => {
 setTimeout(() => checkPaymentReminders().catch(console.error), 5000);
 setInterval(
   () => checkPaymentReminders().catch(console.error),
-  6 * 60 * 60 * 1000
+  6 * 60 * 60 * 1000,
 );
 app.use((err, _req, res, _next) => {
   console.error(err);
@@ -421,6 +496,7 @@ app.use((err, _req, res, _next) => {
     error: err.code === "23505" ? "Bu ma’lumot avval mavjud" : "Server xatosi",
   });
 });
-app.listen(process.env.PORT || 3001, () =>
-  console.log(`API ready on ${process.env.PORT || 3001}`)
-);
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on port ${PORT}`);
+});

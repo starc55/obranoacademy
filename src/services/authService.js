@@ -1,20 +1,21 @@
+import { request } from "./storage";
+
 const SESSION_KEY = "nova_admin_session";
-export const DEMO_ADMIN = {
-  email: "admin@obrano.academy",
-  password: "ObranoacaDemy2026!05155525",
-  name: "Og'abek Orziyev",
-};
+
 export const authService = {
-  isAuthenticated: () => localStorage.getItem(SESSION_KEY) === "active",
-  login(email, password) {
-    if (
-      email.trim().toLowerCase() === DEMO_ADMIN.email &&
-      password === DEMO_ADMIN.password
-    ) {
-      localStorage.setItem(SESSION_KEY, "active");
+  isAuthenticated: () => Boolean(localStorage.getItem(SESSION_KEY)),
+  async login(email, password) {
+    try {
+      const { token } = await request("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
+      localStorage.setItem(SESSION_KEY, token);
+      window.dispatchEvent(new Event("nova:auth"));
       return true;
+    } catch {
+      return false;
     }
-    return false;
   },
   logout() {
     localStorage.removeItem(SESSION_KEY);

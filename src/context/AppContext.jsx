@@ -5,9 +5,14 @@ export function AppProvider({ children }) {
   const [data, setData] = useState(readDB);
   const refresh = () => setData(readDB());
   useEffect(() => {
-    hydrateDB().catch(() => {});
+    const hydrateAfterLogin = () => hydrateDB().catch(() => {});
+    if (localStorage.getItem("nova_admin_session")) hydrateAfterLogin();
     window.addEventListener("nova:data", refresh);
-    return () => window.removeEventListener("nova:data", refresh);
+    window.addEventListener("nova:auth", hydrateAfterLogin);
+    return () => {
+      window.removeEventListener("nova:data", refresh);
+      window.removeEventListener("nova:auth", hydrateAfterLogin);
+    };
   }, []);
   const updateSettings = (patch) => {
     const db = readDB();

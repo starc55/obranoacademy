@@ -9,25 +9,26 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
-import { authService, DEMO_ADMIN } from "../services/authService";
+import { authService } from "../services/authService";
 import logo from "../assets/logo.png";
 
 export function LoginPage() {
   const nav = useNavigate(),
-    [email, setEmail] = useState(DEMO_ADMIN.email),
-    [password, setPassword] = useState(DEMO_ADMIN.password),
+    [email, setEmail] = useState(""),
+    [password, setPassword] = useState(""),
     [show, setShow] = useState(false),
     [loading, setLoading] = useState(false);
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
-      if (authService.login(email, password)) {
+    try {
+      if (await authService.login(email, password)) {
         toast.success("Xush kelibsiz, administrator");
         nav("/");
-      } else toast.error("Login yoki parol noto‘g‘ri");
+      }
+    } finally {
       setLoading(false);
-    }, 350);
+    }
   };
   return (
     <main className="login-page">

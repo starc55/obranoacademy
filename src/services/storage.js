@@ -1,4 +1,6 @@
 import { toast } from "sonner";
+const API_URL = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+const SESSION_KEY = "nova_admin_session";
 const KEY = "nova_neon_cache_v1",
   defaults = {
     adminName: "Administrator",
@@ -34,8 +36,13 @@ let cache = (() => {
 })();
 const notify = () => window.dispatchEvent(new Event("nova:data"));
 const request = (url, options = {}) =>
-  fetch(url, {
-    headers: { "Content-Type": "application/json" },
+  fetch(`${API_URL}${url}`, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(localStorage.getItem(SESSION_KEY)
+        ? { Authorization: `Bearer ${localStorage.getItem(SESSION_KEY)}` }
+        : {}),
+    },
     signal: options.signal || AbortSignal.timeout(15000),
     ...options,
   })

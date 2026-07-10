@@ -30,7 +30,7 @@ export function GroupsPage() {
         </button>
       </div>
       <div className="groups-grid">
-        {groups.map((g, i) => (
+        {groups.map((g) => (
           <article className="group-card" key={g.id}>
             <header>
               <span

@@ -162,7 +162,7 @@ export function StudentsPage() {
               </tr>
             </thead>
             <tbody>
-              {shown.map((s, i) => (
+              {shown.map((s) => (
                 <tr
                   key={s.id}
                   onDoubleClick={() => navigate(`/students/${s.id}`)}
