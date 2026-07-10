@@ -1,0 +1,154 @@
+@media (max-width: 1250px) {
+  .stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .groups-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 960px) {
+  .shell,
+  .shell--collapsed {
+    display: block;
+  }
+  .sidebar {
+    position: fixed;
+    left: 0;
+    transform: translateX(-105%);
+    width: 260px;
+    box-shadow: var(--shadow);
+    transition: 0.25s;
+  }
+  .sidebar--open {
+    transform: translateX(0);
+  }
+  .sidebar__mobile-close,
+  .menu-btn {
+    display: grid;
+  }
+  .topbar {
+    padding: 0 20px;
+  }
+  .content {
+    padding: 22px 20px;
+  }
+  .search-trigger {
+    width: 42px;
+  }
+  .search-trigger span,
+  .search-trigger kbd {
+    display: none;
+  }
+  .dashboard-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .attendance-list > div {
+    align-items: flex-start;
+  }
+  .status-buttons {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .status-buttons button span,
+  .status-buttons kbd {
+    display: none;
+  }
+}
+@media (max-width: 680px) {
+  .topbar {
+    height: 68px;
+  }
+  .topbar__title .eyebrow {
+    display: none;
+  }
+  .topbar__actions .avatar {
+    display: none;
+  }
+  .content {
+    padding: 18px 14px;
+  }
+  .welcome,
+  .page-head {
+    display: block;
+  }
+  .welcome h2,
+  .page-head h2 {
+    font-size: 23px;
+  }
+  .welcome .live {
+    display: none;
+  }
+  .page-head > div:last-child {
+    margin-top: 14px;
+    overflow-x: auto;
+  }
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .dashboard-grid,
+  .settings-grid,
+  .profile-grid {
+    grid-template-columns: 1fr;
+  }
+  .panel--wide {
+    grid-column: auto;
+  }
+  .groups-grid,
+  .money-stats {
+    grid-template-columns: 1fr;
+  }
+  .table-tools {
+    overflow-x: auto;
+  }
+  .searchbox {
+    min-width: 210px;
+  }
+  .attendance-bar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+  .attendance-summary {
+    width: 100%;
+    margin: 0;
+  }
+  .quick-actions {
+    overflow-x: auto;
+  }
+  .attendance-list > div {
+    display: grid;
+    gap: 12px;
+  }
+  .status-buttons {
+    justify-content: flex-start;
+  }
+  .status-buttons button {
+    width: 36px;
+  }
+  .report-filters {
+    overflow-x: auto;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .span-2 {
+    grid-column: auto;
+  }
+  .modal-backdrop {
+    padding: 8px;
+    align-items: end;
+  }
+  .modal {
+    border-radius: 20px 20px 8px 8px;
+  }
+  .topbar__title h1 {
+    font-size: 18px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *:before,
+  *:after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

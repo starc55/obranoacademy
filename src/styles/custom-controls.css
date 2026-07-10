@@ -1,0 +1,228 @@
+.app-select,
+.date-picker {
+  position: relative;
+  min-width: 150px;
+}
+.app-select__trigger,
+.date-picker__trigger {
+  width: 100%;
+  height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--text-primary);
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 1px 2px #00000008;
+  transition: 0.17s;
+}
+.app-select__trigger:hover,
+.date-picker__trigger:hover {
+  border-color: color-mix(in srgb, var(--text-secondary) 55%, var(--border));
+  background: color-mix(in srgb, var(--surface-secondary) 35%, var(--surface));
+}
+.app-select--open .app-select__trigger,
+.date-picker--open .date-picker__trigger {
+  border-color: var(--text-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-primary) 9%, transparent);
+}
+.app-select__trigger svg,
+.date-picker__trigger svg {
+  width: 15px;
+  height: 15px;
+  color: var(--text-secondary);
+  transition: transform 0.18s;
+}
+.app-select--open .app-select__trigger svg {
+  transform: rotate(180deg);
+}
+.placeholder {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.app-select__menu,
+.date-picker__popover {
+  position: absolute;
+  z-index: 250;
+  top: calc(100% + 7px);
+  left: 0;
+  min-width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  box-shadow: 0 18px 50px #00000020;
+  padding: 6px;
+  animation: control-in 0.15s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.app-select__menu {
+  max-height: 260px;
+  overflow: auto;
+}
+.app-select__menu button {
+  width: 100%;
+  min-height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 7px 9px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  text-align: left;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.app-select__menu button:hover,
+.app-select__menu button.is-selected {
+  background: var(--surface-secondary);
+}
+.app-select__menu button.is-selected {
+  font-weight: 700;
+}
+.app-select__menu button svg {
+  width: 14px;
+  color: var(--success);
+}
+.date-picker {
+  min-width: 158px;
+}
+.date-picker__popover {
+  width: 286px;
+  padding: 12px;
+  left: auto;
+  right: 0;
+}
+.date-picker__popover header {
+  display: grid;
+  grid-template-columns: 32px 1fr 32px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.date-picker__popover header strong {
+  text-align: center;
+  font-size: 12px;
+}
+.date-picker__popover header button,
+.calendar-grid button,
+.month-grid button {
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+}
+.date-picker__popover header button {
+  width: 32px;
+  height: 32px;
+}
+.date-picker__popover header button:hover,
+.calendar-grid button:hover,
+.month-grid button:hover {
+  background: var(--surface-secondary);
+}
+.calendar-week,
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+.calendar-week span {
+  text-align: center;
+  padding: 7px 0;
+  color: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 750;
+}
+.calendar-grid button {
+  height: 32px;
+  font-size: 11px;
+}
+.calendar-grid button.is-outside {
+  color: color-mix(in srgb, var(--text-secondary) 45%, transparent);
+}
+.calendar-grid button.is-today {
+  box-shadow: inset 0 0 0 1px var(--border);
+  font-weight: 800;
+}
+.calendar-grid button.is-selected,
+.month-grid button.is-selected {
+  background: var(--text-primary);
+  color: var(--background);
+  font-weight: 800;
+}
+.date-picker__popover footer {
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid var(--border);
+  margin-top: 9px;
+  padding-top: 9px;
+}
+.date-picker__popover footer button {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+}
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+.month-grid button {
+  height: 42px;
+  font-size: 11px;
+}
+@keyframes control-in {
+  from {
+    opacity: 0;
+    transform: translateY(-5px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.form-grid .app-select,
+.form-grid .date-picker {
+  width: 100%;
+}
+.table-tools .app-select {
+  flex: 0 0 auto;
+}
+.report-filters .date-picker {
+  min-width: 160px;
+}
+@media (max-width: 680px) {
+  .app-select__trigger,
+  .date-picker__trigger {
+    height: 40px;
+  }
+  .app-select__menu {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    top: auto;
+    bottom: 12px;
+    max-height: 45vh;
+  }
+  .date-picker__popover {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    top: auto;
+    bottom: 12px;
+    width: auto;
+  }
+  .date-picker {
+    min-width: 145px;
+  }
+}

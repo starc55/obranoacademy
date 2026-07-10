@@ -1,0 +1,86 @@
+.login-brand:before,
+.login-brand:after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  border-radius: 50%;
+  will-change: transform;
+}
+.login-brand:before {
+  width: 420px;
+  height: 420px;
+  right: -150px;
+  bottom: -150px;
+  border: 1px solid #ffffff18;
+  border-top-color: #ffffff70;
+  border-left-color: #ffffff08;
+  box-shadow: 0 0 0 70px #ffffff05, 0 0 0 140px #ffffff025;
+  animation: login-orbit 22s linear infinite;
+}
+
+.login-brand:after {
+  width: 185px;
+  height: 185px;
+  right: 42px;
+  bottom: 42px;
+  border: 1px dashed #ffffff25;
+  border-right-color: #ffffff80;
+  box-shadow: none;
+  animation: login-orbit-reverse 14s linear infinite;
+}
+.login-brand__copy:after {
+  content: "";
+  display: block;
+  width: 54px;
+  height: 2px;
+  margin-top: 28px;
+  background: linear-gradient(90deg, #fff, transparent);
+  animation: login-pulse 2.8s ease-in-out infinite;
+}
+.login-card {
+  animation: login-card-in 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.login-card__mark {
+  animation: login-mark 4s ease-in-out infinite;
+}
+@keyframes login-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes login-orbit-reverse {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+@keyframes login-pulse {
+  50% {
+    width: 110px;
+    opacity: 0.35;
+  }
+}
+@keyframes login-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes login-mark {
+  50% {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px #0002;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .login-brand:before,
+  .login-brand:after,
+  .login-brand__copy:after,
+  .login-card,
+  .login-card__mark {
+    animation: none !important;
+  }
+}

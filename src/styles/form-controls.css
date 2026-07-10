@@ -1,0 +1,189 @@
+/* Unified premium form controls */
+input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 17px;
+  height: 17px;
+  min-height: 0;
+  margin: 0;
+  border: 1.5px solid
+    color-mix(in srgb, var(--text-secondary) 55%, var(--border));
+  border-radius: 5px;
+  background: var(--surface);
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+  transition: border-color 0.16s, background-color 0.16s, box-shadow 0.16s,
+    transform 0.16s;
+  vertical-align: middle;
+  padding: 0;
+}
+input[type="checkbox"]:before {
+  content: "";
+  width: 9px;
+  height: 6px;
+  border-left: 2px solid var(--background);
+  border-bottom: 2px solid var(--background);
+  transform: rotate(-45deg) scale(0);
+  transform-origin: center;
+  transition: transform 0.14s cubic-bezier(0.2, 0.8, 0.2, 1);
+  margin-top: -2px;
+}
+input[type="checkbox"]:hover {
+  border-color: var(--text-primary);
+  background: var(--surface-secondary);
+}
+input[type="checkbox"]:checked {
+  background: var(--text-primary);
+  border-color: var(--text-primary);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--text-primary) 20%, transparent);
+}
+input[type="checkbox"]:checked:before {
+  transform: rotate(-45deg) scale(1);
+}
+input[type="checkbox"]:indeterminate {
+  background: var(--text-primary);
+  border-color: var(--text-primary);
+}
+input[type="checkbox"]:indeterminate:before {
+  width: 8px;
+  height: 0;
+  border-left: 0;
+  border-bottom: 2px solid var(--background);
+  transform: rotate(0) scale(1);
+  margin: 0;
+}
+input[type="checkbox"]:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-primary) 13%, transparent);
+}
+input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+select,
+input[type="date"],
+input[type="month"],
+input[type="time"] {
+  height: 42px;
+  min-height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background-color: var(--surface);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 550;
+  box-shadow: 0 1px 1px color-mix(in srgb, var(--text-primary) 3%, transparent);
+  transition: border-color 0.17s, box-shadow 0.17s, background-color 0.17s;
+}
+select:hover,
+input[type="date"]:hover,
+input[type="month"]:hover,
+input[type="time"]:hover {
+  border-color: color-mix(in srgb, var(--text-secondary) 55%, var(--border));
+  background-color: color-mix(
+    in srgb,
+    var(--surface-secondary) 28%,
+    var(--surface)
+  );
+}
+select:focus,
+input[type="date"]:focus,
+input[type="month"]:focus,
+input[type="time"]:focus {
+  border-color: var(--text-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-primary) 9%, transparent);
+  background-color: var(--surface);
+}
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  padding: 0 40px 0 13px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236b6b68' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+  background-size: 14px;
+}
+select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+select option {
+  background: var(--surface);
+  color: var(--text-primary);
+  padding: 10px;
+}
+input[type="date"],
+input[type="month"],
+input[type="time"] {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  padding: 0 42px 0 13px;
+  min-width: 158px;
+  color-scheme: light;
+}
+input[type="date"]::-webkit-datetime-edit,
+input[type="month"]::-webkit-datetime-edit,
+input[type="time"]::-webkit-datetime-edit {
+  padding: 0;
+  color: var(--text-primary);
+}
+input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+input[type="month"]::-webkit-datetime-edit-fields-wrapper,
+input[type="time"]::-webkit-datetime-edit-fields-wrapper {
+  background: transparent;
+}
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="month"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 40px;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  opacity: 0;
+  z-index: 2;
+}
+input[type="date"],
+input[type="month"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b6b68' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 2v4M16 2v4M3 10h18'/%3E%3Crect width='18' height='18' x='3' y='4' rx='3'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+  background-size: 16px;
+}
+input[type="time"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b6b68' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+  background-size: 16px;
+}
+[data-theme="dark"] select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23999994' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+[data-theme="dark"] input[type="date"],
+[data-theme="dark"] input[type="month"],
+[data-theme="dark"] input[type="time"] {
+  color-scheme: dark;
+}
+[data-theme="dark"] input[type="checkbox"]:checked:before {
+  border-color: #111;
+}
+@media (max-width: 680px) {
+  select,
+  input[type="date"],
+  input[type="month"],
+  input[type="time"] {
+    height: 40px;
+    min-height: 40px;
+  }
+  input[type="date"],
+  input[type="month"] {
+    min-width: 145px;
+  }
+  .table-tools select {
+    flex: 0 0 auto;
+  }
+}

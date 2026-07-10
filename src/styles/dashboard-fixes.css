@@ -1,0 +1,70 @@
+.stats-grid {
+  align-items: stretch;
+}
+.stat-card {
+  display: flex !important;
+  flex-direction: column;
+  height: 126px !important;
+  padding: 13px 14px !important;
+}
+.stat-card__top {
+  width: 100%;
+  height: 30px;
+  min-height: 30px;
+  display: flex;
+  align-items: center !important;
+  justify-content: space-between;
+  gap: 8px;
+}
+.stat-card__icon {
+  width: 30px !important;
+  height: 30px !important;
+  min-width: 30px;
+  min-height: 30px;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  align-self: flex-start;
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: 1;
+}
+.stat-card__icon svg {
+  display: block;
+  width: 15px !important;
+  height: 15px !important;
+  min-width: 15px;
+  stroke-width: 1.9;
+  margin: 0 !important;
+  transform: none !important;
+}
+.stat-card .trend {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  margin: 0;
+}
+.stat-card > strong {
+  margin-top: auto !important;
+  line-height: 1.05;
+}
+.stat-card > p {
+  margin-top: 4px;
+  line-height: 1.2;
+}
+@media (max-width: 680px) {
+  .stat-card {
+    height: 116px !important;
+    padding: 11px !important;
+  }
+  .stat-card__top {
+    height: 28px;
+    min-height: 28px;
+  }
+  .stat-card__icon {
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px;
+    min-height: 28px;
+  }
+}

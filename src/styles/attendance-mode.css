@@ -1,0 +1,66 @@
+.attendance-mode {
+  display: flex;
+  gap: 5px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.attendance-mode button {
+  height: 38px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.attendance-mode button svg {
+  width: 15px;
+}
+.attendance-mode button:hover {
+  background: var(--surface-secondary);
+}
+.attendance-mode button.active {
+  background: var(--text-primary);
+  color: var(--background);
+}
+.individual-count {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.individual-count svg {
+  width: 17px;
+}
+.individual-count strong {
+  font-size: 16px;
+  color: var(--text-primary);
+}
+.attendance-time {
+  width: 112px;
+  flex: 0 0 112px;
+}
+.attendance-time .time-picker__trigger {
+  height: 38px;
+  border-radius: 9px;
+}
+.attendance-time .time-picker__popover {
+  left: auto;
+  right: 0;
+}
+@media (max-width: 680px) {
+  .attendance-mode button {
+    flex: 1;
+    justify-content: center;
+  }
+  .attendance-mode button span {
+    display: none;
+  }
+}

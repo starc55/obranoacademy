@@ -1,0 +1,435 @@
+select {
+  appearance: none;
+  padding-right: 38px;
+  background-image: linear-gradient(
+      45deg,
+      transparent 50%,
+      var(--text-secondary) 50%
+    ),
+    linear-gradient(135deg, var(--text-secondary) 50%, transparent 50%);
+  background-position: calc(100% - 17px) 17px, calc(100% - 12px) 17px;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+input[type="date"],
+input[type="month"],
+input[type="time"] {
+  color-scheme: light;
+  background-color: var(--surface);
+  min-width: 148px;
+}
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="month"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.62;
+  padding: 7px;
+  border-radius: 7px;
+  background-color: var(--surface-secondary);
+}
+[data-theme="dark"] input[type="date"],
+[data-theme="dark"] input[type="month"],
+[data-theme="dark"] input[type="time"] {
+  color-scheme: dark;
+}
+.sidebar {
+  padding: 14px 12px;
+}
+.brand {
+  height: 58px;
+}
+.sidebar nav {
+  align-content: start;
+  gap: 3px;
+  padding-top: 8px;
+}
+.sidebar nav a {
+  height: 40px;
+  padding: 0 11px;
+  position: relative;
+}
+.sidebar nav a svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+}
+.sidebar__foot {
+  padding-top: 12px;
+  gap: 6px;
+}
+.sidebar__logout {
+  margin-left: 0 !important;
+}
+.nav-tooltip {
+  display: none !important;
+}
+.shell--collapsed .sidebar {
+  overflow: visible;
+}
+.shell--collapsed .sidebar nav a {
+  justify-content: center;
+  padding: 0;
+}
+.shell--collapsed .sidebar nav a:hover .nav-tooltip {
+  display: block !important;
+  position: absolute;
+  left: 52px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--text-primary);
+  color: var(--background);
+  font-size: 11px;
+  box-shadow: var(--shadow);
+  z-index: 50;
+}
+.shell--collapsed .sidebar__foot .sidebar__logout {
+  display: none;
+}
+.stats-grid {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  overflow: visible;
+  gap: 10px;
+}
+.stat-card {
+  min-width: 0;
+  padding: 13px 14px;
+  height: 126px;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  position: relative;
+}
+.stat-card__icon {
+  width: 29px;
+  height: 29px;
+}
+.stat-card__icon svg {
+  width: 14px;
+  height: 14px;
+}
+.stat-card > strong {
+  font-size: 22px;
+  margin-top: 8px;
+  align-self: end;
+}
+.stat-card > p {
+  font-size: 10px;
+}
+.stat-card > svg {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  width: 58px;
+  height: 20px;
+  margin: 0;
+}
+.dashboard-grid {
+  grid-template-columns: minmax(0, 1.45fr) minmax(250px, 0.75fr);
+  gap: 12px;
+}
+.panel {
+  padding: 17px;
+  border-radius: 18px;
+}
+.panel--wide {
+  grid-column: auto;
+}
+.dashboard-grid .panel:nth-child(4) {
+  grid-column: 1/-1;
+}
+.chart {
+  height: 225px;
+}
+.chart--pie {
+  height: 205px;
+}
+.recharts-default-tooltip {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  box-shadow: var(--shadow) !important;
+  font-size: 11px;
+}
+.recharts-cartesian-axis-tick text {
+  fill: var(--text-secondary);
+}
+.attention-list .badge {
+  max-width: 155px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.form-grid--flush {
+  padding: 0;
+}
+.settings-section-head {
+  border-top: 1px solid var(--border);
+  padding-top: 18px;
+}
+.fee-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.fee-grid label {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  align-items: center;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface-secondary);
+}
+.fee-grid label > span:nth-child(2) {
+  display: grid;
+  font-size: 11px;
+  font-weight: 750;
+}
+.fee-grid label small {
+  font-size: 9px;
+}
+.fee-grid label input {
+  grid-column: 1/-1;
+  width: 100%;
+  background: var(--surface);
+}
+.field-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+}
+.field-icon svg {
+  width: 15px;
+}
+.rule-preview {
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  padding: 13px;
+  background: color-mix(in srgb, var(--success) 5%, var(--surface));
+}
+.rule-preview > strong {
+  font-size: 11px;
+}
+.rule-preview > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+  font-size: 10px;
+}
+.rule-preview b {
+  padding: 5px 8px;
+  border-radius: 7px;
+  background: var(--surface);
+}
+.login-page {
+  display: grid;
+  grid-template-columns: minmax(330px, 0.9fr) minmax(440px, 1.1fr);
+  min-height: 100vh;
+  background: var(--background);
+}
+.login-brand {
+  background: #111;
+  color: #fff;
+  padding: 36px clamp(28px, 5vw, 72px);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  overflow: hidden;
+}
+.login-brand:after {
+  content: "";
+  position: absolute;
+  width: 420px;
+  height: 420px;
+  border: 1px solid #ffffff12;
+  border-radius: 50%;
+  right: -170px;
+  bottom: -170px;
+  box-shadow: 0 0 0 70px #ffffff05, 0 0 0 140px #ffffff03;
+}
+.brand--login {
+  padding: 0;
+  color: #fff;
+  z-index: 1;
+}
+.brand--login .brand__mark {
+  background: #fff;
+  color: #111;
+}
+.brand--login small {
+  color: #aaa;
+}
+.login-brand__copy {
+  z-index: 1;
+}
+.login-brand__copy .eyebrow {
+  color: #888;
+}
+.login-brand__copy h1 {
+  font-size: clamp(38px, 5vw, 68px);
+  line-height: 1.02;
+  letter-spacing: -0.055em;
+  margin: 18px 0;
+}
+.login-brand__copy p {
+  color: #aaa;
+  max-width: 440px;
+  line-height: 1.7;
+}
+.login-proof {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 1;
+}
+.login-proof span {
+  display: grid;
+}
+.login-proof small {
+  color: #888;
+}
+.login-panel {
+  display: grid;
+  place-items: center;
+  padding: 28px;
+}
+.login-card {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 19px;
+}
+.login-card header {
+  display: grid;
+  justify-items: start;
+  gap: 9px;
+}
+.login-card__mark {
+  display: none;
+}
+.login-card label {
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 750;
+}
+.input-shell {
+  height: 48px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  padding: 0 13px;
+  gap: 10px;
+}
+.input-shell:focus-within {
+  border-color: var(--text-primary);
+}
+.input-shell svg {
+  color: var(--text-secondary);
+  width: 16px;
+}
+.input-shell input {
+  flex: 1;
+  border: 0;
+  padding: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.input-shell button {
+  border: 0;
+  background: transparent;
+  display: grid;
+}
+.login-submit {
+  height: 48px;
+}
+.demo-credentials {
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  font-size: 10px;
+}
+.demo-credentials span {
+  grid-column: 1/-1;
+  color: var(--text-secondary);
+}
+.demo-credentials code {
+  background: var(--surface-secondary);
+  padding: 6px;
+  border-radius: 6px;
+  text-align: center;
+}
+@media (max-width: 1200px) {
+  .stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+@media (max-width: 960px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-grid .panel:nth-child(4) {
+    grid-column: auto;
+  }
+  .login-page {
+    grid-template-columns: 1fr;
+  }
+  .login-brand {
+    display: none;
+  }
+}
+@media (max-width: 680px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .stat-card {
+    height: 116px;
+    padding: 11px;
+  }
+  .dashboard-grid {
+    gap: 10px;
+  }
+  .chart {
+    height: 200px;
+  }
+  .panel {
+    padding: 14px;
+  }
+  .fee-grid {
+    grid-template-columns: 1fr;
+  }
+  .login-panel {
+    padding: 20px;
+  }
+  .login-card__mark {
+    display: grid;
+    width: 38px;
+    height: 38px;
+    border-radius: 11px;
+    background: var(--text-primary);
+    color: var(--background);
+    place-items: center;
+  }
+  .attention-list .badge {
+    max-width: 105px;
+  }
+  .topbar__actions .quick-add {
+    width: 40px;
+    padding: 0;
+    font-size: 0;
+  }
+}
