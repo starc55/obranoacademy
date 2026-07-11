@@ -44,8 +44,8 @@ export function DashboardPage() {
     todayRecords = attendance
       .filter((a) => a.date === today)
       .flatMap((a) => a.records),
-    present = todayRecords.filter((r) => r.status === "present").length,
-    absent = todayRecords.filter((r) => r.status === "absent").length,
+    entered = todayRecords.filter((r) => r.status === "entered").length,
+    notEntered = todayRecords.filter((r) => r.status === "not_entered").length,
     late = todayRecords.filter((r) => r.status === "late").length,
     month = today.slice(0, 7),
     monthPayments = payments.filter((p) => p.month === month),
@@ -55,7 +55,7 @@ export function DashboardPage() {
     attendanceRate = allRecords.length
       ? Math.round(
           (allRecords.filter(
-            (r) => r.status === "present" || r.status === "late",
+            (r) => r.status === "entered" || r.status === "late",
           ).length /
             allRecords.length) *
             100,
@@ -75,7 +75,7 @@ export function DashboardPage() {
       insightOverview.averageHealth || "—",
       "30 kun",
     ],
-    [UserX, "Bugun kelmadi", absent, "Bugun"],
+    [UserX, "Bugun kirmadi", notEntered, "Bugun"],
     [Clock3, "Yuqori risk", insightOverview.highRisk.length, "Faol"],
     [Wallet, "Qarzdorlar", debts, "Joriy oy"],
     [
@@ -94,8 +94,8 @@ export function DashboardPage() {
           .flatMap((a) => a.records);
       return {
         name: ["Ya", "Du", "Se", "Chor", "Pay", "Ju", "Sha"][d.getDay()],
-        kelgan: rs.filter((r) => r.status === "present").length,
-        kelmagan: rs.filter((r) => r.status === "absent").length,
+        kirgan: rs.filter((r) => r.status === "entered").length,
+        kirmagan: rs.filter((r) => r.status === "not_entered").length,
       };
     }),
     groupData = groups.map((g) => ({
@@ -171,7 +171,7 @@ export function DashboardPage() {
                 <h3>Haftalik davomat</h3>
                 <p>Oxirgi 7 kunlik real dinamika</p>
               </div>
-              <span className="badge badge--present">
+              <span className="badge badge--entered">
                 {attendanceRate}% o‘rtacha
               </span>
             </header>
@@ -198,7 +198,7 @@ export function DashboardPage() {
                   <Tooltip />
                   <Area
                     type="monotone"
-                    dataKey="kelgan"
+                    dataKey="kirgan"
                     stroke="var(--text-primary)"
                     fill="url(#area)"
                     strokeWidth={2.5}
@@ -220,8 +220,8 @@ export function DashboardPage() {
                   <PieChart>
                     <Pie
                       data={[
-                        { name: "Keldi", value: present },
-                        { name: "Kelmadi", value: absent },
+                        { name: "Kirdi", value: entered },
+                        { name: "Kirmadi", value: notEntered },
                         { name: "Kechikdi", value: late },
                       ]}
                       dataKey="value"
@@ -291,7 +291,7 @@ export function DashboardPage() {
                     </div>
                     <span
                       className={`badge badge--${
-                        absences >= 3 ? "absent" : payment
+                        absences >= 3 ? "not_entered" : payment
                       }`}
                     >
                       {absences >= 3

@@ -3,10 +3,10 @@ import { paymentsService } from "./paymentsService";
 const rate = (records) =>
   records.length
     ? Math.round(
-        (records.filter((r) => r.status === "present" || r.status === "late")
+        (records.filter((r) => r.status === "entered" || r.status === "late")
           .length /
           records.length) *
-          100
+          100,
       )
     : 0;
 export const analyticsService = {
@@ -14,14 +14,14 @@ export const analyticsService = {
     return rate(
       readDB()
         .attendance.flatMap((a) => a.records)
-        .filter((r) => r.studentId === studentId)
+        .filter((r) => r.studentId === studentId),
     );
   },
   groupAttendance(groupId) {
     return rate(
       readDB()
         .attendance.filter((a) => a.groupId === groupId)
-        .flatMap((a) => a.records)
+        .flatMap((a) => a.records),
     );
   },
   studentPaymentStatus(studentId) {
@@ -33,6 +33,7 @@ export const analyticsService = {
   studentAbsences(studentId) {
     return readDB()
       .attendance.flatMap((a) => a.records)
-      .filter((r) => r.studentId === studentId && r.status === "absent").length;
+      .filter((r) => r.studentId === studentId && r.status === "not_entered")
+      .length;
   },
 };

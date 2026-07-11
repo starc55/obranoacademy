@@ -163,7 +163,7 @@ main {
 }
 .badge--active,
 .badge--paid,
-.badge--present {
+.badge--entered {
   color: var(--success);
   background: color-mix(in srgb, var(--success) 11%, transparent);
 }
@@ -174,7 +174,7 @@ main {
   background: color-mix(in srgb, var(--warning) 12%, transparent);
 }
 .badge--debt,
-.badge--absent {
+.badge--not_entered {
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 10%, transparent);
 }

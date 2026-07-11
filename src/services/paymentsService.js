@@ -1,15 +1,26 @@
 import { table, readDB } from "./storage";
 function absenceStreak(studentId) {
-  const db=readDB(),student=db.students.find(s=>s.id===studentId),group=db.groups.find(g=>g.id===student?.groupId),text=(group?.days||'').toLowerCase(),groupDays=text.includes('se')&&text.includes('pay')?[2,4,6]:[1,3,5],allowed=student?.scheduleDays?.length?student.scheduleDays:groupDays;
-  const sessions = db.attendance.filter(a=>{const day=new Date(`${a.date}T00:00:00`).getDay()||7;return allowed.includes(day)}).flatMap((a) =>
+  const db = readDB(),
+    student = db.students.find((s) => s.id === studentId),
+    group = db.groups.find((g) => g.id === student?.groupId),
+    text = (group?.days || "").toLowerCase(),
+    groupDays =
+      text.includes("se") && text.includes("pay") ? [2, 4, 6] : [1, 3, 5],
+    allowed = student?.scheduleDays?.length ? student.scheduleDays : groupDays;
+  const sessions = db.attendance
+    .filter((a) => {
+      const day = new Date(`${a.date}T00:00:00`).getDay() || 7;
+      return allowed.includes(day);
+    })
+    .flatMap((a) =>
       a.records
         .filter((r) => r.studentId === studentId)
-        .map((r) => ({ date: a.date, status: r.status }))
+        .map((r) => ({ date: a.date, status: r.status })),
     )
     .sort((a, b) => b.date.localeCompare(a.date));
   let streak = 0;
   for (const row of sessions) {
-    if (row.status === "absent") streak++;
+    if (row.status === "not_entered") streak++;
     else break;
   }
   return streak;
@@ -22,10 +33,10 @@ export const paymentsService = {
     return d <= 0
       ? "paid"
       : +p.amount > 0
-      ? "partial"
-      : p.date
-      ? "overdue"
-      : "debt";
+        ? "partial"
+        : p.date
+          ? "overdue"
+          : "debt";
   },
   calculateFee(studentId, baseFee) {
     const db = readDB(),

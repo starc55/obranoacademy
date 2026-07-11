@@ -24,6 +24,12 @@ await sql`create table if not exists weekly_summaries(id uuid primary key defaul
 await sql`create index if not exists weekly_summaries_week_idx on weekly_summaries(week_start desc)`;
 await sql`create table if not exists smart_alerts(id uuid primary key default gen_random_uuid(),student_id uuid references students(id) on delete cascade,group_id uuid references groups(id) on delete set null,type text not null,severity text not null,title text not null,message text not null,status text not null default 'OPEN',fingerprint text not null unique,metadata jsonb not null default '{}'::jsonb,created_at timestamptz not null default now(),updated_at timestamptz not null default now())`;
 await sql`create index if not exists smart_alerts_status_idx on smart_alerts(status,severity,created_at desc)`;
+await sql.transaction([
+  sql`alter table attendance_records drop constraint if exists attendance_records_status_check`,
+  sql`update attendance_records set status=case status when 'present' then 'entered' when 'absent' then 'not_entered' else status end where status in ('present','absent')`,
+  sql`alter table attendance_records add constraint attendance_records_status_check check(status in ('entered','not_entered','late','excused','left'))`,
+]);
+await sql`update weekly_summaries set metrics=(metrics-'absent')||jsonb_build_object('notEntered',metrics->'absent') where metrics ? 'absent'`;
 const allowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
@@ -294,8 +300,8 @@ app.get("/api/students/:id/timeline", async (req, res, next) => {
       id: row.id,
       type: `attendance_${row.status}`,
       title: {
-        present: "Darsga qatnashdi",
-        absent: "Darsni qoldirdi",
+        entered: "Darsga kirdi",
+        not_entered: "Darsga kirmadi",
         late: "Darsga kechikdi",
         excused: "Sababli qatnashmadi",
         left: "Darsdan erta ketdi",
@@ -528,12 +534,14 @@ const buildWeeklyMetrics = async (range) => {
       sql`select ar.student_id,ar.status,ar.session_id from attendance_records ar join attendance_sessions s on s.id=ar.session_id where s.session_date between ${range.start} and ${range.end}`,
       sql`select id from students where status='active'`,
       sql`select count(*)::int count from student_progress_events where type='assignment_late' and occurred_at::date between ${range.start} and ${range.end}`,
-      sql`select g.id,g.name,count(ar.student_id)::int total,count(ar.student_id) filter(where ar.status in('present','late'))::int attended from groups g left join attendance_sessions s on s.group_id=g.id and s.session_date between ${range.start} and ${range.end} left join attendance_records ar on ar.session_id=s.id where g.active=true group by g.id,g.name`,
+      sql`select g.id,g.name,count(ar.student_id)::int total,count(ar.student_id) filter(where ar.status in('entered','late'))::int attended from groups g left join attendance_sessions s on s.group_id=g.id and s.session_date between ${range.start} and ${range.end} left join attendance_records ar on ar.session_id=s.id where g.active=true group by g.id,g.name`,
     ]);
   const attended = records.filter((row) =>
-    ["present", "late"].includes(row.status),
+    ["entered", "late"].includes(row.status),
   ).length;
-  const absent = records.filter((row) => row.status === "absent").length;
+  const notEntered = records.filter(
+    (row) => row.status === "not_entered",
+  ).length;
   const late = records.filter((row) => row.status === "late").length;
   let behind = 0;
   for (const student of activeStudents) {
@@ -555,7 +563,7 @@ const buildWeeklyMetrics = async (range) => {
       ? Math.round((attended / records.length) * 100)
       : 0,
     attended,
-    absent,
+    notEntered,
     late,
     activeStudents: activeStudents.length,
     behind,

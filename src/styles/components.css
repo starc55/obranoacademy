@@ -514,11 +514,11 @@ tbody tr:hover {
   gap: 5px;
   font-size: 10px;
 }
-.status-buttons .is-present {
+.status-buttons .is-entered {
   color: var(--success);
   background: #25875012;
 }
-.status-buttons .is-absent {
+.status-buttons .is-not_entered {
   color: var(--danger);
   background: #d94c4c12;
 }

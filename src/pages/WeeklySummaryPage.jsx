@@ -71,7 +71,11 @@ export function WeeklySummaryPage() {
               <h3>Markaz haftalik natijasi</h3>
             </div>
             <span
-              className={`badge ${current.telegramStatus === "sent" ? "badge--present" : "badge--late"}`}
+              className={`badge ${
+                current.telegramStatus === "sent"
+                  ? "badge--entered"
+                  : "badge--late"
+              }`}
             >
               <Send /> Telegram: {current.telegramStatus}
             </span>

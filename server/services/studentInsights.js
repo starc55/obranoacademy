@@ -22,7 +22,7 @@ export function calculateHealth({ attendance = [], events = [] }) {
     const points = relevant.reduce(
       (n, x) =>
         n +
-        (x.status === "present"
+        (x.status === "entered"
           ? 100
           : x.status === "late"
             ? 75
@@ -101,17 +101,17 @@ export function calculateHealth({ attendance = [], events = [] }) {
 export function detectRisk({ attendance = [], health }) {
   const rows = attendance.filter((x) => x.status),
     rate = rows.length
-      ? (rows.filter((x) => ["present", "late"].includes(x.status)).length /
+      ? (rows.filter((x) => ["entered", "late"].includes(x.status)).length /
           rows.length) *
         100
       : 100;
   let consecutive = 0;
   for (const row of [...rows].reverse()) {
-    if (row.status === "absent") consecutive++;
+    if (row.status === "not_entered") consecutive++;
     else break;
   }
   const recent = rows.slice(-3),
-    recentAbsent = recent.filter((x) => x.status === "absent").length,
+    recentAbsent = recent.filter((x) => x.status === "not_entered").length,
     reasons = [];
   if (recent.length === 3 && recentAbsent >= 2)
     reasons.push({

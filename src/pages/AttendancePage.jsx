@@ -17,8 +17,8 @@ import { useApp } from "../context/AppContext";
 import { attendanceService } from "../services/attendanceService";
 import { StatusBadge } from "../components/shared/StatusBadge";
 const statuses = [
-  ["present", "Kirdi", Check],
-  ["absent", "Kirmadi", MinusCircle],
+  ["entered", "Kirdi", Check],
+  ["not_entered", "Kirmadi", MinusCircle],
   ["late", "Kechikdi", Clock3],
   ["excused", "Sababli", ShieldCheck],
   ["left", "Erta ketdi", LogOut],
@@ -210,11 +210,11 @@ export function AttendancePage() {
           </div>
         </div>
         <div className="quick-actions">
-          <button className="btn" onClick={() => all("present")}>
-            <CheckCheck /> Hammasi keldi
+          <button className="btn" onClick={() => all("entered")}>
+            <CheckCheck /> Hammasi kirdi
           </button>
-          <button className="btn" onClick={() => all("absent")}>
-            <MinusCircle /> Hammasi kelmadi
+          <button className="btn" onClick={() => all("not_entered")}>
+            <MinusCircle /> Hammasi kirmadi
           </button>
           <button className="btn" onClick={() => setRecords({})}>
             <RotateCcw /> Tozalash
@@ -235,7 +235,7 @@ export function AttendancePage() {
                   {s.firstName[0]}
                   {s.lastName[0]}
                 </div>
-                <div>
+                <div className="info">
                   <strong>{s.fullName}</strong>
                   <small>
                     {mode === "individual" ? "Individual dars" : s.phone}

@@ -130,11 +130,11 @@ export function GroupDetailsPage() {
                 <CalendarDays />
                 <span>
                   {new Intl.DateTimeFormat("uz-UZ").format(
-                    new Date(`${s.date}T00:00:00`)
+                    new Date(`${s.date}T00:00:00`),
                   )}
                 </span>
                 <strong>
-                  {s.records.filter((r) => r.status === "present").length}/
+                  {s.records.filter((r) => r.status === "entered").length}/
                   {s.records.length}
                 </strong>
               </div>

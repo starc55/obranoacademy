@@ -52,8 +52,8 @@ export function StudentDetailsPage() {
   const records = attendance
       .flatMap((a) => a.records.map((r) => ({ ...r, date: a.date })))
       .filter((r) => r.studentId === id),
-    present = records.filter((r) => r.status === "present").length,
-    rate = records.length ? Math.round((present / records.length) * 100) : 0;
+    entered = records.filter((r) => r.status === "entered").length,
+    rate = records.length ? Math.round((entered / records.length) * 100) : 0;
   return (
     <>
       <button className="back" onClick={() => nav(-1)}>

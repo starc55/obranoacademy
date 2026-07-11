@@ -6,7 +6,7 @@ test("health handles missing data", () =>
 test("health redistributes available metric weights", () =>
   assert.equal(
     calculateHealth({
-      attendance: [{ status: "present" }, { status: "absent" }],
+      attendance: [{ status: "entered" }, { status: "not_entered" }],
       events: [],
     }).score,
     61,
@@ -15,9 +15,9 @@ test("two of last three absences creates risk reason", () => {
   const health = { score: 60 };
   const risk = detectRisk({
     attendance: [
-      { status: "absent" },
-      { status: "present" },
-      { status: "absent" },
+      { status: "not_entered" },
+      { status: "entered" },
+      { status: "not_entered" },
     ],
     health,
   });
@@ -28,9 +28,9 @@ test("three consecutive absences are critical", () =>
   assert.equal(
     detectRisk({
       attendance: [
-        { status: "absent" },
-        { status: "absent" },
-        { status: "absent" },
+        { status: "not_entered" },
+        { status: "not_entered" },
+        { status: "not_entered" },
       ],
       health: { score: 40 },
     }).level,
