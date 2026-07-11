@@ -38,6 +38,20 @@ export const paymentsService = {
           ? "overdue"
           : "debt";
   },
+  nextDueDate(paymentDate) {
+    if (!paymentDate) return null;
+    const date = new Date(`${String(paymentDate).slice(0, 10)}T00:00:00`),
+      day = date.getDate();
+    date.setDate(1);
+    date.setMonth(date.getMonth() + 1);
+    date.setDate(
+      Math.min(
+        day,
+        new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate(),
+      ),
+    );
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  },
   calculateFee(studentId, baseFee) {
     const db = readDB(),
       streak = absenceStreak(studentId),

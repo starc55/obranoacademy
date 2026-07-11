@@ -55,10 +55,10 @@ export function DashboardPage() {
     attendanceRate = allRecords.length
       ? Math.round(
           (allRecords.filter(
-            (r) => r.status === "entered" || r.status === "late",
+            (r) => r.status === "entered" || r.status === "late"
           ).length /
             allRecords.length) *
-            100,
+            100
         )
       : 0;
   const stats = [
@@ -110,7 +110,7 @@ export function DashboardPage() {
       }))
       .filter(
         (x) =>
-          x.absences >= 3 || x.payment === "debt" || x.payment === "overdue",
+          x.absences >= 3 || x.payment === "debt" || x.payment === "overdue"
       )
       .slice(0, 5),
     dateLabel = new Intl.DateTimeFormat("uz-UZ", {
