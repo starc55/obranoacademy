@@ -7,6 +7,8 @@ import {
   ClipboardCheck,
   CreditCard,
   BarChart3,
+  CalendarRange,
+  BellRing,
   Settings,
   Search,
   Plus,
@@ -35,12 +37,14 @@ const nav = [
   ["/attendance", "Yo‘qlama", ClipboardCheck],
   ["/payments", "To‘lovlar", CreditCard],
   ["/reports", "Hisobotlar", BarChart3],
+  ["/weekly-summary", "Haftalik hisobot", CalendarRange],
+  ["/alerts", "Smart Alerts", BellRing],
   ["/settings", "Sozlamalar", Settings],
 ];
 export function AppLayout({ children }) {
   const { settings, updateSettings, students, groups } = useApp(),
     [collapsed, setCollapsed] = useState(
-      () => localStorage.getItem("sidebar") === "1"
+      () => localStorage.getItem("sidebar") === "1",
     ),
     [mobile, setMobile] = useState(false),
     [add, setAdd] = useState(false),
@@ -70,7 +74,7 @@ export function AppLayout({ children }) {
       .filter((s) =>
         `${s.fullName} ${s.phone} ${s.note}`
           .toLowerCase()
-          .includes(query.toLowerCase())
+          .includes(query.toLowerCase()),
       )
       .slice(0, 5)
       .map((s) => ({ label: s.fullName, to: `/students/${s.id}` })),
@@ -124,7 +128,6 @@ export function AppLayout({ children }) {
             title="Chiqish"
             onClick={() => {
               authService.logout();
-              navigate("/login");
             }}
           >
             <LogOut />

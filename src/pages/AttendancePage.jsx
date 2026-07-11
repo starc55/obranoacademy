@@ -77,9 +77,10 @@ export function AttendancePage() {
     );
     setLessonTimes(
       Object.fromEntries(
-        sessions
-          .filter((session) => session.studentId)
-          .map((session) => [session.studentId, session.lessonTime || ""]),
+        scheduledIndividuals.map((student) => {
+          const session = sessions.find((row) => row.studentId === student.id);
+          return [student.id, session?.lessonTime || student.lessonTime || ""];
+        }),
       ),
     );
   }, [mode, groupId, date, students]);
@@ -106,35 +107,43 @@ export function AttendancePage() {
         return;
       }
       setSaving(true);
-      const jobs =
+      const toastId = toast.loading("Yo‘qlama saqlanmoqda...");
+      const sessions =
         mode === "individual"
-          ? list.map((s) =>
-              attendanceService.save({
-                sessionType: "individual",
-                groupId: null,
-                studentId: s.id,
-                date,
-                lessonTime: lessonTimes[s.id] || null,
-                records: [
-                  { studentId: s.id, status: records[s.id] || "present" },
-                ],
-              }),
-            )
+          ? list.map((s) => ({
+              sessionType: "individual",
+              groupId: null,
+              studentId: s.id,
+              date,
+              lessonTime: lessonTimes[s.id] || null,
+              records: records[s.id]
+                ? [{ studentId: s.id, status: records[s.id] }]
+                : [],
+            }))
           : [
-              attendanceService.save({
+              {
                 ...target,
-                records: list.map((s) => ({
-                  studentId: s.id,
-                  status: records[s.id] || "present",
-                })),
-              }),
+                records: list
+                  .filter((s) => records[s.id])
+                  .map((s) => ({
+                    studentId: s.id,
+                    status: records[s.id],
+                  })),
+              },
             ];
-      await Promise.all(jobs).finally(() => setSaving(false));
-      toast.success(
-        mode === "individual"
-          ? "Individual yo‘qlama saqlandi"
-          : "Guruh yo‘qlamasi saqlandi",
-      );
+      try {
+        await attendanceService.saveMany(sessions);
+        toast.success(
+          mode === "individual"
+            ? "Individual yo‘qlama saqlandi"
+            : "Guruh yo‘qlamasi saqlandi",
+          { id: toastId },
+        );
+      } catch {
+        toast.error("Yo‘qlamani saqlashda xatolik yuz berdi", { id: toastId });
+      } finally {
+        setSaving(false);
+      }
     };
   return (
     <>
@@ -148,6 +157,12 @@ export function AttendancePage() {
         </button>
       </div>
       <section className="attendance-shell">
+        {saving && (
+          <div className="attendance-saving" role="status" aria-live="polite">
+            <i />
+            <strong>Yo‘qlama saqlanmoqda...</strong>
+          </div>
+        )}
         <div className="attendance-mode">
           <button
             className={mode === "group" ? "active" : ""}

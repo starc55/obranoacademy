@@ -1,13 +1,12 @@
 select {
   appearance: none;
   padding-right: 38px;
-  background-image: linear-gradient(
-      45deg,
-      transparent 50%,
-      var(--text-secondary) 50%
-    ),
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--text-secondary) 50%),
     linear-gradient(135deg, var(--text-secondary) 50%, transparent 50%);
-  background-position: calc(100% - 17px) 17px, calc(100% - 12px) 17px;
+  background-position:
+    calc(100% - 17px) 17px,
+    calc(100% - 12px) 17px;
   background-size: 5px 5px;
   background-repeat: no-repeat;
 }
@@ -146,11 +145,20 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   height: 205px;
 }
 .recharts-default-tooltip {
-  background: var(--surface) !important;
-  border: 1px solid var(--border) !important;
+  background: var(--text-primary) !important;
+  color: var(--background) !important;
+  border: 0 !important;
   border-radius: 10px !important;
   box-shadow: var(--shadow) !important;
   font-size: 11px;
+}
+.recharts-tooltip-label,
+.recharts-tooltip-item {
+  color: var(--background) !important;
+}
+.recharts-tooltip-cursor {
+  fill: transparent !important;
+  stroke: var(--border) !important;
 }
 .recharts-cartesian-axis-tick text {
   fill: var(--text-secondary);
@@ -254,7 +262,9 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   border-radius: 50%;
   right: -170px;
   bottom: -170px;
-  box-shadow: 0 0 0 70px #ffffff05, 0 0 0 140px #ffffff03;
+  box-shadow:
+    0 0 0 70px #ffffff05,
+    0 0 0 140px #ffffff03;
 }
 .brand--login {
   padding: 0;

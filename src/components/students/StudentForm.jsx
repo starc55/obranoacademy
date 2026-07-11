@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { AppSelect, DatePicker } from "../ui/controls";
+import { AppSelect, DatePicker, TimePicker } from "../ui/controls";
 import { Modal } from "../ui/Modal";
 import { studentsService } from "../../services/studentsService";
 import { useApp } from "../../context/AppContext";
@@ -15,6 +15,7 @@ const schema = z
     enrollmentType: z.enum(["group", "individual"]),
     groupId: z.string().nullish(),
     scheduleDays: z.array(z.number()).optional(),
+    lessonTime: z.string().nullish(),
     monthlyFee: z.coerce.number().min(0),
     initialPaymentStatus: z.enum(["unpaid", "paid"]).optional(),
     initialPaymentAmount: z.coerce.number().optional(),
@@ -32,6 +33,12 @@ const schema = z
         code: "custom",
         path: ["scheduleDays"],
         message: "Individual uchun haftaning 3 kunini tanlang",
+      });
+    if (v.enrollmentType === "individual" && !v.lessonTime)
+      ctx.addIssue({
+        code: "custom",
+        path: ["lessonTime"],
+        message: "Individual dars vaqtini tanlang",
       });
     if (v.initialPaymentStatus === "paid" && !(v.initialPaymentAmount > 0))
       ctx.addIssue({
@@ -74,6 +81,7 @@ export function StudentForm({ open, onClose, student }) {
             groupId: "",
             schedulePreset: "mwf",
             scheduleDays: [1, 3, 5],
+            lessonTime: "",
             joinedDate: new Date().toISOString().slice(0, 10),
             monthlyFee: fee,
             initialPaymentStatus: "unpaid",
@@ -209,6 +217,20 @@ export function StudentForm({ open, onClose, student }) {
               })}
             </div>
             <small>{errors.scheduleDays?.message}</small>
+            <label>
+              Doimiy dars vaqti
+              <TimePicker
+                name="lessonTime"
+                value={watch("lessonTime") || ""}
+                onValueChange={(value) =>
+                  setValue("lessonTime", value, {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  })
+                }
+              />
+              <small>{errors.lessonTime?.message}</small>
+            </label>
           </div>
         ) : (
           <label className="span-2">

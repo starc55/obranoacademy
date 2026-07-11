@@ -19,5 +19,10 @@ export const authService = {
   },
   logout() {
     localStorage.removeItem(SESSION_KEY);
+    window.dispatchEvent(new Event("nova:auth"));
+  },
+  subscribe(listener) {
+    window.addEventListener("nova:auth", listener);
+    return () => window.removeEventListener("nova:auth", listener);
   },
 };

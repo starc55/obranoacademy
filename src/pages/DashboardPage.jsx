@@ -22,11 +22,22 @@ import {
   BarChart,
   Bar,
 } from "recharts";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useApp } from "../context/AppContext";
 import { paymentsService } from "../services/paymentsService";
 import { analyticsService } from "../services/analyticsService";
+import { request } from "../services/storage";
 export function DashboardPage() {
+  const [insightOverview, setInsightOverview] = useState({
+    averageHealth: 0,
+    highRisk: [],
+  });
+  useEffect(() => {
+    request("/api/insights/overview")
+      .then(setInsightOverview)
+      .catch(() => {});
+  }, []);
   const { students, groups, attendance, payments, settings } = useApp(),
     now = new Date(),
     today = now.toISOString().slice(0, 10),
@@ -44,10 +55,10 @@ export function DashboardPage() {
     attendanceRate = allRecords.length
       ? Math.round(
           (allRecords.filter(
-            (r) => r.status === "present" || r.status === "late"
+            (r) => r.status === "present" || r.status === "late",
           ).length /
             allRecords.length) *
-            100
+            100,
         )
       : 0;
   const stats = [
@@ -58,9 +69,14 @@ export function DashboardPage() {
       groups.filter((g) => g.active !== false).length,
       "Real vaqt",
     ],
-    [UserCheck, "Bugun keldi", present, "Bugun"],
+    [
+      UserCheck,
+      "O‘rtacha Health Score",
+      insightOverview.averageHealth || "—",
+      "30 kun",
+    ],
     [UserX, "Bugun kelmadi", absent, "Bugun"],
-    [Clock3, "Kechikdi", late, "Bugun"],
+    [Clock3, "Yuqori risk", insightOverview.highRisk.length, "Faol"],
     [Wallet, "Qarzdorlar", debts, "Joriy oy"],
     [
       TrendingUp,
@@ -94,7 +110,7 @@ export function DashboardPage() {
       }))
       .filter(
         (x) =>
-          x.absences >= 3 || x.payment === "debt" || x.payment === "overdue"
+          x.absences >= 3 || x.payment === "debt" || x.payment === "overdue",
       )
       .slice(0, 5),
     dateLabel = new Intl.DateTimeFormat("uz-UZ", {

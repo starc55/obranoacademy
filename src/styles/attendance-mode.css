@@ -5,6 +5,36 @@
   border-bottom: 1px solid var(--border);
   background: var(--surface);
 }
+.attendance-saving {
+  position: absolute;
+  inset: 0;
+  z-index: 75;
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+}
+.attendance-saving i,
+.route-loader i {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--border);
+  border-top-color: var(--text-primary);
+  border-radius: 50%;
+  animation: attendance-spin 0.7s linear infinite;
+}
+.attendance-saving strong {
+  font-size: 12px;
+}
+@keyframes attendance-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 .attendance-mode button {
   height: 38px;
   padding: 0 13px;

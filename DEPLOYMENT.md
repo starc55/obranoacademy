@@ -56,9 +56,16 @@ Set these environment variables in Render:
 - `ADMIN_EMAIL` (required)
 - `ADMIN_PASSWORD` (required; use a strong unique password)
 - `JWT_SECRET` (required; generated automatically by `render.yaml`, otherwise set a long random value)
+- `APP_TIMEZONE=Asia/Tashkent` (required for lesson reminders)
+- `APP_BASE_URL` (Vercel production URL)
+- `CRON_SECRET` (required for protected weekly cron endpoint)
 - `CLIENT_URL` (required; set this to the exact Vercel production origin after frontend deployment)
 - `TELEGRAM_BOT_TOKEN` (optional; required only for Telegram notifications)
 - `TELEGRAM_CHAT_ID` (optional; required only for Telegram notifications)
+
+Lesson reminders are checked every 30 seconds. For exact-time Telegram delivery, use an always-on Render instance; a sleeping free instance cannot run timers while suspended.
+
+For reliable weekly generation call `POST /api/cron/weekly` every Monday from Render Cron or an external scheduler and send `CRON_SECRET` in the `x-cron-secret` header. The endpoint is idempotent: one admin summary per week.
 
 Render provides `PORT` automatically. Do not hardcode it.
 

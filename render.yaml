@@ -19,6 +19,12 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
+      - key: APP_TIMEZONE
+        value: Asia/Tashkent
+      - key: APP_BASE_URL
+        sync: false
+      - key: CRON_SECRET
+        generateValue: true
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_CHAT_ID
