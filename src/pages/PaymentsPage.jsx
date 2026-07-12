@@ -107,7 +107,7 @@ export function PaymentsPage() {
       setOpen(false);
       setEdit(null);
     };
-  const save = (e) => {
+  const save = async (e) => {
     e.preventDefault();
     const v = Object.fromEntries(new FormData(e.currentTarget)),
       student = students.find((s) => s.id === v.studentId);
@@ -122,12 +122,16 @@ export function PaymentsPage() {
         fee: calc.total,
         absencePenalty: calc.penalty,
       };
-    edit
-      ? paymentsService.update(edit.id, payload)
-      : paymentsService.create(payload);
-    toast.success(edit ? "To‘lov yangilandi" : "To‘lov qo‘shildi");
-    setMonth(v.month);
-    close();
+    try {
+      await paymentsService.saveMonthly(payload, edit?.id);
+      toast.success(
+        edit ? "To‘lov yangilandi" : "To‘lov saqlandi, analitika yangilandi",
+      );
+      setMonth(v.month);
+      close();
+    } catch {
+      // request xatoni toast orqali ko‘rsatadi
+    }
   };
   return (
     <>

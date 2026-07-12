@@ -30,6 +30,7 @@ await sql.transaction([
   sql`alter table attendance_records add constraint attendance_records_status_check check(status in ('entered','not_entered','late','excused','left'))`,
 ]);
 await sql`update weekly_summaries set metrics=(metrics-'absent')||jsonb_build_object('notEntered',metrics->'absent') where metrics ? 'absent'`;
+await sql`create unique index if not exists payments_student_month_unique on payments(student_id,payment_month)`;
 const allowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
@@ -413,7 +414,7 @@ app.post("/api/payments", async (req, res, next) => {
         p.id
       },${p.studentId},${month},${p.amount || 0},${p.fee || 0},${
         p.absencePenalty || 0
-      },${p.date || null},${p.method || "Naqd"},${p.note || ""}) returning *`;
+      },${p.date || null},${p.method || "Naqd"},${p.note || ""}) on conflict(student_id,payment_month) do update set amount=payments.amount+excluded.amount,fee=excluded.fee,absence_penalty=excluded.absence_penalty,payment_date=excluded.payment_date,method=excluded.method,note=excluded.note,updated_at=now() returning *`;
     res.status(201).json(paymentOut(row));
   } catch (e) {
     next(e);

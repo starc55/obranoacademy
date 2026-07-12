@@ -1,4 +1,4 @@
-import { table, readDB } from "./storage";
+import { table, readDB, request, hydrateDB } from "./storage";
 function absenceStreak(studentId) {
   const db = readDB(),
     student = db.students.find((s) => s.id === studentId),
@@ -51,6 +51,20 @@ export const paymentsService = {
       ),
     );
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  },
+  async saveMonthly(payload, editId = null) {
+    const result = await request(
+      editId ? `/api/payments/${editId}` : "/api/payments",
+      {
+        method: editId ? "PATCH" : "POST",
+        body: JSON.stringify({
+          ...payload,
+          id: payload.id || crypto.randomUUID(),
+        }),
+      },
+    );
+    await hydrateDB();
+    return result;
   },
   calculateFee(studentId, baseFee) {
     const db = readDB(),
