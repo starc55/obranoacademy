@@ -731,10 +731,20 @@ const timeToMinutes = (value) => {
     ? hours * 60 + minutes
     : null;
 };
-const reminderIsDue = (lessonTime, nowTime) => {
+const reminderIsDue = (
+  lessonTime,
+  nowTime,
+  minutesBefore = 0,
+  minutesAfter = 15,
+) => {
   const lesson = timeToMinutes(lessonTime),
     now = timeToMinutes(nowTime);
-  return lesson !== null && now !== null && now >= lesson && now <= lesson + 15;
+  return (
+    lesson !== null &&
+    now !== null &&
+    now >= lesson - minutesBefore &&
+    now <= lesson + minutesAfter
+  );
 };
 const getTodayLessons = async (now = zonedNow()) => {
   const [groups, individuals] = await Promise.all([
@@ -804,16 +814,26 @@ const checkLessonReminders = async () => {
     ...individuals
       .filter(
         (student) =>
-          reminderIsDue(student.lesson_time, now.time),
+          reminderIsDue(student.lesson_time, now.time, 15, 0),
       )
-      .map((student) => ({
-        type: "individual_lesson",
-        studentId: student.id,
-        key: `individual_lesson:${student.id}:${now.date}`,
-        title: `${student.first_name} ${student.last_name} darsi`,
-        message: `${now.time} · Individual dars · ${student.phone}`,
-        telegram: `<b>OBRANO Academy · Individual dars</b>\n👤 ${student.first_name} ${student.last_name}\n⏰ ${now.time}\n📞 ${student.phone}`,
-      })),
+      .map((student) => {
+        const lessonTime = String(student.lesson_time).slice(0, 5),
+          minutesLeft = Math.max(
+            0,
+            timeToMinutes(lessonTime) - timeToMinutes(now.time),
+          ),
+          timing = minutesLeft
+            ? `${minutesLeft} daqiqadan keyin boshlanadi`
+            : "Dars boshlanmoqda";
+        return {
+          type: "individual_lesson",
+          studentId: student.id,
+          key: `individual_lesson:${student.id}:${now.date}`,
+          title: `${student.first_name} ${student.last_name} darsi yaqinlashmoqda`,
+          message: `${lessonTime} · ${timing} · Individual dars · ${student.phone}`,
+          telegram: `<b>OBRANO Academy · Individual dars eslatmasi</b>\n👤 ${student.first_name} ${student.last_name}\n⏳ ${timing}\n⏰ Dars vaqti: ${lessonTime}\n📞 ${student.phone}`,
+        };
+      }),
   ];
   let created = 0;
   for (const reminder of reminders) {
