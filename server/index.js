@@ -76,7 +76,7 @@ const validToken = (token) => {
 app.use("/api", (req, res, next) => {
   if (req.path === "/health" || req.path === "/auth/login") return next();
   if (
-    req.path === "/cron/weekly" &&
+    ["/cron/weekly", "/cron/reminders"].includes(req.path) &&
     process.env.CRON_SECRET &&
     req.headers["x-cron-secret"] === process.env.CRON_SECRET
   )
@@ -725,18 +725,73 @@ const groupWeekdays = (value = "") => {
     .map((part) => aliases[part.replace(/[^a-z]/g, "")])
     .filter(Boolean);
 };
-const checkLessonReminders = async () => {
-  const now = zonedNow();
+const timeToMinutes = (value) => {
+  const [hours, minutes] = String(value || "").slice(0, 5).split(":").map(Number);
+  return Number.isFinite(hours) && Number.isFinite(minutes)
+    ? hours * 60 + minutes
+    : null;
+};
+const reminderIsDue = (lessonTime, nowTime) => {
+  const lesson = timeToMinutes(lessonTime),
+    now = timeToMinutes(nowTime);
+  return lesson !== null && now !== null && now >= lesson && now <= lesson + 15;
+};
+const getTodayLessons = async (now = zonedNow()) => {
   const [groups, individuals] = await Promise.all([
     sql`select g.id,g.name,g.teacher,g.days,g.start_time,g.end_time,g.room,count(s.id)::int student_count from groups g left join students s on s.group_id=g.id and s.status='active' where g.active=true and g.start_time is not null group by g.id`,
     sql`select id,first_name,last_name,phone,schedule_days,lesson_time from students where status='active' and enrollment_type='individual' and lesson_time is not null`,
   ]);
+  return {
+    groups: groups.filter((group) =>
+      groupWeekdays(group.days).includes(now.weekday),
+    ),
+    individuals: individuals.filter((student) =>
+      (student.schedule_days || []).includes(now.weekday),
+    ),
+  };
+};
+const checkDailyScheduleReminder = async () => {
+  const now = zonedNow(),
+    { groups, individuals } = await getTodayLessons(now),
+    key = `daily_schedule:${now.date}`;
+  if (!groups.length && !individuals.length) return 0;
+  const groupLines = groups
+      .sort((a, b) => String(a.start_time).localeCompare(String(b.start_time)))
+      .map(
+        (group) =>
+          `• ${String(group.start_time).slice(0, 5)}–${String(group.end_time || "").slice(0, 5)} — ${group.name} (${group.student_count} nafar)`,
+      ),
+    individualLines = individuals
+      .sort((a, b) => String(a.lesson_time).localeCompare(String(b.lesson_time)))
+      .map(
+        (student) =>
+          `• ${String(student.lesson_time).slice(0, 5)} — ${student.first_name} ${student.last_name}`,
+      ),
+    message = [
+      `<b>OBRANO Academy · Bugungi darslar</b>`,
+      `📅 ${now.date}`,
+      groupLines.length ? `\n<b>Guruhlar:</b>\n${groupLines.join("\n")}` : "",
+      individualLines.length
+        ? `\n<b>Individuallar:</b>\n${individualLines.join("\n")}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  const inserted =
+    await sql`insert into notifications(type,student_id,title,message,due_date,dedupe_key) values('daily_schedule',null,'Bugungi darslar',${[...groupLines, ...individualLines].join(" · ")},${now.date},${key}) on conflict(dedupe_key) do nothing returning id`;
+  if (!inserted.length) return 0;
+  const telegram = await sendTelegram(message);
+  await sql`update notifications set telegram_sent=${telegram.sent},telegram_error=${telegram.error} where id=${inserted[0].id}`;
+  return 1;
+};
+const checkLessonReminders = async () => {
+  const now = zonedNow();
+  const { groups, individuals } = await getTodayLessons(now);
   const reminders = [
     ...groups
       .filter(
         (group) =>
-          groupWeekdays(group.days).includes(now.weekday) &&
-          String(group.start_time).slice(0, 5) === now.time,
+          reminderIsDue(group.start_time, now.time),
       )
       .map((group) => ({
         type: "group_lesson",
@@ -749,8 +804,7 @@ const checkLessonReminders = async () => {
     ...individuals
       .filter(
         (student) =>
-          (student.schedule_days || []).includes(now.weekday) &&
-          String(student.lesson_time).slice(0, 5) === now.time,
+          reminderIsDue(student.lesson_time, now.time),
       )
       .map((student) => ({
         type: "individual_lesson",
@@ -773,11 +827,12 @@ const checkLessonReminders = async () => {
   return created;
 };
 const checkAllReminders = async () => {
-  const [payments, lessons] = await Promise.all([
+  const [payments, lessons, dailySchedule] = await Promise.all([
     checkPaymentReminders(),
     checkLessonReminders(),
+    checkDailyScheduleReminder(),
   ]);
-  return payments + lessons;
+  return payments + lessons + dailySchedule;
 };
 app.get("/api/notifications", async (_req, res, next) => {
   try {
@@ -855,6 +910,13 @@ app.post("/api/cron/weekly", async (_req, res, next) => {
     next(e);
   }
 });
+app.all("/api/cron/reminders", async (_req, res, next) => {
+  try {
+    res.json({ created: await checkAllReminders() });
+  } catch (e) {
+    next(e);
+  }
+});
 app.get("/api/alerts", async (req, res, next) => {
   try {
     const status = req.query.status || null,
@@ -903,7 +965,13 @@ app.patch("/api/alerts/:id", async (req, res, next) => {
 });
 setTimeout(() => checkAllReminders().catch(console.error), 5000);
 setTimeout(() => generateSmartAlerts().catch(console.error), 8000);
-setInterval(() => checkLessonReminders().catch(console.error), 30 * 1000);
+setInterval(
+  () =>
+    Promise.all([checkLessonReminders(), checkDailyScheduleReminder()]).catch(
+      console.error,
+    ),
+  30 * 1000,
+);
 setInterval(
   () => checkPaymentReminders().catch(console.error),
   6 * 60 * 60 * 1000,

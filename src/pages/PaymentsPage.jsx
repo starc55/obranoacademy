@@ -57,6 +57,7 @@ export function PaymentsPage() {
         .values(),
     ),
     today = todayValue(),
+    currentCalendarMonth = today.slice(0, 7),
     nextThreeDays = (() => {
       const date = new Date(`${today}T00:00:00`);
       date.setDate(date.getDate() + 3);
@@ -76,6 +77,8 @@ export function PaymentsPage() {
         : latestRows.filter((payment) => {
             const due = paymentsService.nextDueDate(payment.date);
             if (dueFilter === "paid_today") return payment.date === today;
+            if (dueFilter === "due_this_month")
+              return due?.slice(0, 7) === currentCalendarMonth;
             if (dueFilter === "due_today") return due === today;
             if (dueFilter === "overdue") return due && due < today;
             if (dueFilter === "next_3")
@@ -189,6 +192,7 @@ export function PaymentsPage() {
           <AppSelect value={dueFilter} onValueChange={setDueFilter}>
             <option value="month">Hisobot oyi</option>
             <option value="paid_today">Bugun to‘laganlar</option>
+            <option value="due_this_month">Shu oy to‘lov qiladiganlar</option>
             <option value="due_today">Bugun muddati yetganlar</option>
             <option value="overdue">Muddati o‘tganlar</option>
             <option value="next_3">Keyingi 3 kun</option>

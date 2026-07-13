@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { AppSelect, DatePicker, TimePicker } from "../ui/controls";
 import { Modal } from "../ui/Modal";
 import { studentsService } from "../../services/studentsService";
+import { paymentsService } from "../../services/paymentsService";
 import { useApp } from "../../context/AppContext";
 const schema = z
   .object({
@@ -74,6 +75,10 @@ export function StudentForm({ open, onClose, student }) {
               : "mwf",
             scheduleDays: student.scheduleDays || [1, 3, 5],
             initialPaymentStatus: "unpaid",
+            initialPaymentAmount: fee,
+            initialPaymentMonth: new Date().toISOString().slice(0, 7),
+            initialPaymentDate: new Date().toISOString().slice(0, 10),
+            initialPaymentMethod: "Naqd",
           }
         : {
             status: "active",
@@ -140,7 +145,21 @@ export function StudentForm({ open, onClose, student }) {
     try {
       if (student) {
         await studentsService.updateAndRefresh(student.id, payload);
-        toast.success("O‘quvchi yangilandi");
+        if (v.initialPaymentStatus === "paid") {
+          await paymentsService.saveMonthly({
+            studentId: student.id,
+            amount: Number(v.initialPaymentAmount || 0),
+            fee: Number(v.monthlyFee || 0),
+            absencePenalty: 0,
+            month:
+              v.initialPaymentMonth || new Date().toISOString().slice(0, 7),
+            date:
+              v.initialPaymentDate || new Date().toISOString().slice(0, 10),
+            method: v.initialPaymentMethod || "Naqd",
+            note: "O‘quvchini tahrirlashda qabul qilindi",
+          });
+          toast.success("O‘quvchi va to‘lov yangilandi");
+        } else toast.success("O‘quvchi yangilandi");
       } else {
         await studentsService.createWithPayment(payload, {
           status: v.initialPaymentStatus,
@@ -290,10 +309,10 @@ export function StudentForm({ open, onClose, student }) {
             : "Guruh oylik to‘lovi"}
           <input type="number" {...register("monthlyFee")} />
         </label>
-        {!student && (
+        {(
           <>
             <label className="span-2">
-              Joriy oy to‘lov holati
+              {student ? "To‘lov qabul qilish" : "Joriy oy to‘lov holati"}
               <AppSelect
                 name="initialPaymentStatus"
                 value={paymentStatus}
