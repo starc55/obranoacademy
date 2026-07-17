@@ -1,7 +1,7 @@
 import { analyticsService } from "../services/analyticsService";
 import { studyDuration } from "../utils/studyDuration";
 import { AppSelect } from "../components/ui/AppSelect";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search,
@@ -23,26 +23,57 @@ import { StudentForm } from "../components/students/StudentForm";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { ImportModal } from "../components/students/ImportModal";
 import { importExportService } from "../services/importExportService";
+import { request } from "../services/storage";
+const matchesMastery = (score, mastery) => {
+  if (mastery === "all") return true;
+  if (mastery === "no_data") return score == null;
+  if (score == null) return false;
+  if (mastery === "excellent") return score >= 80;
+  if (mastery === "satisfactory") return score >= 60 && score < 80;
+  if (mastery === "attention") return score >= 30 && score < 60;
+  if (mastery === "critical") return score < 30;
+  return true;
+};
 export function StudentsPage() {
   const { students, groups } = useApp(),
     [q, setQ] = useState(""),
     [group, setGroup] = useState("all"),
     [status, setStatus] = useState("all"),
+    [mastery, setMastery] = useState("all"),
+    [insightScores, setInsightScores] = useState({}),
     [selected, setSelected] = useState([]),
     [edit, setEdit] = useState(null),
     [add, setAdd] = useState(false),
     [imp, setImp] = useState(false),
     [page, setPage] = useState(1),
     navigate = useNavigate();
+  useEffect(() => {
+    request("/api/insights/overview")
+      .then((result) =>
+        setInsightScores(
+          Object.fromEntries(
+            (result.students || []).map((item) => [
+              item.id,
+              item.health?.score ?? null,
+            ])
+          )
+        )
+      )
+      .catch(() => setInsightScores({}));
+  }, [students]);
   const rows = useMemo(
       () =>
         students.filter(
           (s) =>
             (s.fullName + s.phone).toLowerCase().includes(q.toLowerCase()) &&
-            (group === "all" || s.groupId === group) &&
-            (status === "all" || s.status === status)
+            (group === "all" ||
+              (group === "individual"
+                ? s.enrollmentType === "individual"
+                : s.groupId === group)) &&
+            (status === "all" || s.status === status) &&
+            matchesMastery(insightScores[s.id], mastery)
         ),
-      [students, q, group, status]
+      [students, q, group, status, mastery, insightScores]
     ),
     shown = rows.slice((page - 1) * 10, page * 10),
     toggle = (id) =>
@@ -106,18 +137,45 @@ export function StudentsPage() {
               placeholder="Ism yoki telefon..."
             />
           </label>
-          <AppSelect value={group} onChange={(e) => setGroup(e.target.value)}>
-            <option value="all">Barcha guruhlar</option>
+          <AppSelect
+            value={group}
+            onChange={(e) => {
+              setGroup(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="all">Barcha ta’lim turlari</option>
+            <option value="individual">Individual</option>
             {groups.map((g) => (
               <option key={g.id} value={g.id}>
                 {g.name}
               </option>
             ))}
           </AppSelect>
-          <AppSelect value={status} onChange={(e) => setStatus(e.target.value)}>
+          <AppSelect
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value);
+              setPage(1);
+            }}
+          >
             <option value="all">Barcha holatlar</option>
             <option value="active">Faol</option>
             <option value="inactive">Noaktiv</option>
+          </AppSelect>
+          <AppSelect
+            value={mastery}
+            onChange={(e) => {
+              setMastery(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="all">Barcha o‘zlashtirish</option>
+            <option value="excellent">A’lo · 80–100%</option>
+            <option value="satisfactory">Qoniqarli · 60–79%</option>
+            <option value="attention">E’tibor kerak · 30–59%</option>
+            <option value="critical">Kritik · 0–29%</option>
+            <option value="no_data">Ma’lumot yetarli emas</option>
           </AppSelect>
           {selected.length > 0 && (
             <div className="bulk">
@@ -153,9 +211,10 @@ export function StudentsPage() {
                 </th>
                 <th>O‘quvchi</th>
                 <th>Telefon</th>
-                <th>Guruh</th>
+                <th>O‘qiydi</th>
                 <th>Qo‘shilgan</th>
                 <th>Davomat</th>
+                <th>O‘zlashtirish</th>
                 <th>To‘lov</th>
                 <th>Holati</th>
                 <th />
@@ -191,15 +250,26 @@ export function StudentsPage() {
                     <small>{s.parentPhone}</small>
                   </td>
                   <td>
-                    <span
-                      className="group-dot"
-                      style={{
-                        "--dot": groups.find((g) => g.id === s.groupId)?.color,
-                      }}
-                    />
-                    {groups.find((g) => g.id === s.groupId)?.name}
+                    {s.enrollmentType === "individual" ? (
+                      "Individual"
+                    ) : (
+                      <>
+                        <span
+                          className="group-dot"
+                          style={{
+                            "--dot": groups.find((g) => g.id === s.groupId)
+                              ?.color,
+                          }}
+                        />
+                        {groups.find((g) => g.id === s.groupId)?.name ||
+                          "Guruh belgilanmagan"}
+                      </>
+                    )}
                   </td>
-                  <td>{s.joinedDate}<small>{studyDuration(s.joinedDate)} o‘qiyapti</small></td>
+                  <td>
+                    {s.joinedDate}
+                    <small className="nowrap">{studyDuration(s.joinedDate)}dan beri o‘qiyapti</small>
+                  </td>
                   <td>
                     <strong>{analyticsService.studentAttendance(s.id)}%</strong>
                     <div className="progress">
@@ -209,6 +279,18 @@ export function StudentsPage() {
                         }}
                       />
                     </div>
+                  </td>
+                  <td>
+                    <strong>
+                      {insightScores[s.id] == null
+                        ? "—"
+                        : `${insightScores[s.id]}%`}
+                    </strong>
+                    {insightScores[s.id] != null && (
+                      <div className="progress">
+                        <i style={{ "--w": `${insightScores[s.id]}%` }} />
+                      </div>
+                    )}
                   </td>
                   <td>
                     <StatusBadge

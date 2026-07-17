@@ -69,6 +69,7 @@ export function AppLayout({ children }) {
       return !x;
     });
   };
+
   const results = [
     ...students
       .filter((s) =>
