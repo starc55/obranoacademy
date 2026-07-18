@@ -38,7 +38,9 @@ const notify = () => window.dispatchEvent(new Event("nova:data"));
 const request = (url, options = {}) =>
   fetch(`${API_URL}${url}`, {
     headers: {
-      "Content-Type": "application/json",
+      ...(options.body instanceof FormData
+        ? {}
+        : { "Content-Type": "application/json" }),
       ...(localStorage.getItem(SESSION_KEY)
         ? { Authorization: `Bearer ${localStorage.getItem(SESSION_KEY)}` }
         : {}),
@@ -117,5 +119,19 @@ export async function saveSettings(settings) {
     method: "PUT",
     body: JSON.stringify(settings),
   });
+}
+export async function download(url, fileName = "download") {
+  const response = await fetch(`${API_URL}${url}`, {
+    headers: localStorage.getItem(SESSION_KEY)
+      ? { Authorization: `Bearer ${localStorage.getItem(SESSION_KEY)}` }
+      : {},
+  });
+  if (!response.ok) throw new Error("Faylni yuklab bo‘lmadi");
+  const href = URL.createObjectURL(await response.blob()),
+    anchor = document.createElement("a");
+  anchor.href = href;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(href);
 }
 export { KEY, request };

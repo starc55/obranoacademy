@@ -9,6 +9,7 @@ import {
   BarChart3,
   CalendarRange,
   BellRing,
+  ListChecks,
   Settings,
   Search,
   Plus,
@@ -39,6 +40,7 @@ const nav = [
   ["/reports", "Hisobotlar", BarChart3],
   ["/weekly-summary", "Haftalik hisobot", CalendarRange],
   ["/alerts", "Smart Alerts", BellRing],
+  ["/submissions", "Vazifalarni tekshirish", ListChecks],
   ["/settings", "Sozlamalar", Settings],
 ];
 export function AppLayout({ children }) {

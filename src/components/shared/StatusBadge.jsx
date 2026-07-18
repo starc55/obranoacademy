@@ -2,6 +2,7 @@ export function StatusBadge({ status }) {
   const labels = {
     active: "Faol",
     inactive: "Noaktiv",
+    suspended: "To‘xtatilgan",
     paid: "To‘langan",
     partial: "Qisman",
     debt: "Qarzdor",

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   ArrowRight,
   Eye,
@@ -23,8 +24,9 @@ export function LoginPage() {
     setLoading(true);
     try {
       if (await authService.login(email, password)) {
-        toast.success("Xush kelibsiz, administrator");
-        nav("/");
+        const role = authService.getRole();
+        toast.success("Xush kelibsiz");
+        nav(role === "STUDENT" ? "/student" : "/");
       }
     } finally {
       setLoading(false);
@@ -61,7 +63,7 @@ export function LoginPage() {
         <form className="login-card" onSubmit={submit}>
           <header>
             <span className="login-card__mark">N</span>
-            <h2>Admin panelga kirish</h2>
+            <h2>Tizimga kirish</h2>
             <p>Davom etish uchun hisob ma’lumotlarini kiriting.</p>
           </header>
           <label>
@@ -106,6 +108,7 @@ export function LoginPage() {
               </>
             )}
           </button>
+          <p className="auth-switch">O‘quvchi hisobingiz yo‘qmi? <Link to="/register">Ro‘yxatdan o‘tish</Link></p>
         </form>
       </section>
     </main>

@@ -23,7 +23,7 @@ import { StudentForm } from "../components/students/StudentForm";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { ImportModal } from "../components/students/ImportModal";
 import { importExportService } from "../services/importExportService";
-import { request } from "../services/storage";
+import { hydrateDB, request } from "../services/storage";
 const matchesMastery = (score, mastery) => {
   if (mastery === "all") return true;
   if (mastery === "no_data") return score == null;
@@ -41,6 +41,7 @@ export function StudentsPage() {
     [status, setStatus] = useState("all"),
     [mastery, setMastery] = useState("all"),
     [insightScores, setInsightScores] = useState({}),
+    [submissionStats, setSubmissionStats] = useState({}),
     [selected, setSelected] = useState([]),
     [edit, setEdit] = useState(null),
     [add, setAdd] = useState(false),
@@ -60,6 +61,11 @@ export function StudentsPage() {
         )
       )
       .catch(() => setInsightScores({}));
+  }, [students]);
+  useEffect(() => {
+    request("/api/admin/students")
+      .then((rows) => setSubmissionStats(Object.fromEntries(rows.map((row) => [row.id, row]))))
+      .catch(() => setSubmissionStats({}));
   }, [students]);
   const rows = useMemo(
       () =>
@@ -86,6 +92,15 @@ export function StudentsPage() {
       setSelected([]);
       toast.success("O‘quvchi o‘chirildi");
     }
+  };
+  const toggleStudentStatus = async (student) => {
+    const next = student.status === "active" ? "suspended" : "active";
+    await request(`/api/admin/students/${student.id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: next }),
+    });
+    await hydrateDB();
+    toast.success(next === "active" ? "O‘quvchi faollashtirildi" : "O‘quvchi to‘xtatildi");
   };
   const copy = async () => {
     const data = students
@@ -162,6 +177,7 @@ export function StudentsPage() {
             <option value="all">Barcha holatlar</option>
             <option value="active">Faol</option>
             <option value="inactive">Noaktiv</option>
+            <option value="suspended">To‘xtatilgan</option>
           </AppSelect>
           <AppSelect
             value={mastery}
@@ -215,6 +231,7 @@ export function StudentsPage() {
                 <th>Qo‘shilgan</th>
                 <th>Davomat</th>
                 <th>O‘zlashtirish</th>
+                <th>Vazifalar</th>
                 <th>To‘lov</th>
                 <th>Holati</th>
                 <th />
@@ -247,7 +264,7 @@ export function StudentsPage() {
                   </td>
                   <td>
                     {s.phone}
-                    <small>{s.parentPhone}</small>
+                    <small>{s.email || s.parentPhone}</small>
                   </td>
                   <td>
                     {s.enrollmentType === "individual" ? (
@@ -293,6 +310,10 @@ export function StudentsPage() {
                     )}
                   </td>
                   <td>
+                    <strong>{submissionStats[s.id]?.totalSubmissions || 0}</strong>
+                    <small>O‘rtacha: {submissionStats[s.id]?.averageScore || 0}/100</small>
+                  </td>
+                  <td>
                     <StatusBadge
                       status={analyticsService.studentPaymentStatus(s.id)}
                     />
@@ -308,7 +329,10 @@ export function StudentsPage() {
                       <button onClick={() => remove([s.id])}>
                         <Trash2 />
                       </button>
-                      <button>
+                      <button
+                        title={s.status === "active" ? "Faoliyatini to‘xtatish" : "Faollashtirish"}
+                        onClick={() => toggleStudentStatus(s)}
+                      >
                         <MoreHorizontal />
                       </button>
                     </div>

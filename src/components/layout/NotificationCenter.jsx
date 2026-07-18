@@ -6,6 +6,7 @@ export function NotificationCenter() {
   const [open, setOpen] = useState(false),
     [items, setItems] = useState([]),
     [loading, setLoading] = useState(false),
+    [markingAll, setMarkingAll] = useState(false),
     root = useRef(null),
     load = async () => {
       setLoading(true);
@@ -35,16 +36,25 @@ export function NotificationCenter() {
         rows.map((n) => (n.id === item.id ? { ...n, isRead: true } : n)),
       );
     },
-    check = async () => {
-      const result = await request("/api/notifications/check", {
-        method: "POST",
-      });
-      await load();
-      toast.success(
-        result.created
-          ? `${result.created} ta yangi bildirishnoma`
-          : "Yangi bildirishnoma yo‘q",
-      );
+    markAll = async () => {
+      if (!unread || markingAll) return;
+      setMarkingAll(true);
+      try {
+        const unreadItems = items.filter((item) => !item.isRead);
+        await Promise.all(
+          unreadItems.map((item) =>
+            request(`/api/notifications/${item.id}/read`, {
+              method: "PATCH",
+            }),
+          ),
+        );
+        setItems((rows) => rows.map((item) => ({ ...item, isRead: true })));
+        toast.success(`${unreadItems.length} ta bildirishnoma o‘qildi`);
+      } catch {
+        toast.error("Bildirishnomalarni o‘qilgan qilishda xatolik");
+      } finally {
+        setMarkingAll(false);
+      }
     };
   return (
     <div className="notification-center" ref={root}>
@@ -68,8 +78,10 @@ export function NotificationCenter() {
             </div>
             <button
               className="icon-btn"
-              onClick={check}
-              title="Hozir tekshirish"
+              onClick={markAll}
+              title="Barchasini o‘qildi deb belgilash"
+              aria-label="Barchasini o‘qildi deb belgilash"
+              disabled={!unread || markingAll}
             >
               <CheckCheck />
             </button>

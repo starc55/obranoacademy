@@ -29,3 +29,5 @@ services:
         sync: false
       - key: TELEGRAM_CHAT_ID
         sync: false
+      - key: FILE_UPLOAD_MAX_MB
+        value: 10

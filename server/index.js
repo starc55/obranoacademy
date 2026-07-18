@@ -3,6 +3,10 @@ import express from "express";
 import cors from "cors";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
+import bcrypt from "bcryptjs";
+import rateLimit from "express-rate-limit";
+import multer from "multer";
+import { fileTypeFromBuffer } from "file-type";
 import { calculateHealth, detectRisk } from "./services/studentInsights.js";
 const requiredEnv = [
   "DATABASE_URL",
@@ -18,6 +22,24 @@ if (missingEnv.length)
 const sql = neon(process.env.DATABASE_URL),
   app = express();
 await sql`alter table students add column if not exists lesson_time time`;
+await sql`alter table students add column if not exists email text`;
+await sql`alter table students add column if not exists password_hash text`;
+await sql`alter table students add column if not exists telegram_username text`;
+await sql`alter table students add column if not exists github_username text`;
+await sql`alter table students add column if not exists direction text`;
+await sql`alter table students add column if not exists last_active_at timestamptz`;
+await sql`create unique index if not exists students_email_unique on students(lower(email)) where email is not null`;
+await sql`create table if not exists submissions(id uuid primary key default gen_random_uuid(),student_id uuid not null references students(id) on delete cascade,title text not null,description text not null default '',category text not null default 'Umumiy',text_content text not null default '',github_url text,demo_url text,figma_url text,external_url text,status text not null default 'SUBMITTED',score smallint,admin_feedback text not null default '',reviewed_by text,reviewed_at timestamptz,revision_number integer not null default 1,submitted_at timestamptz not null default now(),created_at timestamptz not null default now(),updated_at timestamptz not null default now(),check(status in ('SUBMITTED','UNDER_REVIEW','REVISION_REQUESTED','APPROVED','REJECTED')),check(score is null or score between 0 and 100))`;
+await sql`create index if not exists submissions_student_idx on submissions(student_id,submitted_at desc)`;
+await sql`create index if not exists submissions_status_idx on submissions(status,submitted_at desc)`;
+await sql`create index if not exists submissions_category_idx on submissions(category)`;
+await sql`create table if not exists submission_revisions(id uuid primary key default gen_random_uuid(),submission_id uuid not null references submissions(id) on delete cascade,revision_number integer not null,snapshot jsonb not null,feedback text not null default '',score smallint,submitted_at timestamptz not null default now(),unique(submission_id,revision_number))`;
+await sql`create table if not exists submission_files(id uuid primary key default gen_random_uuid(),submission_id uuid not null unique references submissions(id) on delete cascade,original_name text not null,mime_type text not null,size_bytes integer not null,content bytea not null,created_at timestamptz not null default now())`;
+await sql`create table if not exists achievements(id uuid primary key default gen_random_uuid(),student_id uuid not null references students(id) on delete cascade,type text not null,title text not null,description text not null default '',submission_id uuid references submissions(id) on delete set null,created_at timestamptz not null default now())`;
+await sql`create unique index if not exists achievements_perfect_submission_unique on achievements(submission_id,type) where submission_id is not null`;
+await sql`create table if not exists admin_notes(id uuid primary key default gen_random_uuid(),student_id uuid not null references students(id) on delete cascade,note text not null,created_by text not null,created_at timestamptz not null default now())`;
+await sql`alter table notifications add column if not exists audience text not null default 'ADMIN'`;
+await sql`alter table notifications add column if not exists related_url text`;
 await sql`create table if not exists student_progress_events(id uuid primary key default gen_random_uuid(),student_id uuid not null references students(id) on delete cascade,type text not null,title text not null,description text not null default '',value numeric,metadata jsonb not null default '{}'::jsonb,occurred_at timestamptz not null default now(),created_at timestamptz not null default now())`;
 await sql`create index if not exists progress_events_student_date_idx on student_progress_events(student_id,occurred_at desc)`;
 await sql`create table if not exists weekly_summaries(id uuid primary key default gen_random_uuid(),week_start date not null,week_end date not null,summary_type text not null default 'admin',metrics jsonb not null,telegram_status text not null default 'pending',telegram_sent_at timestamptz,telegram_error text,created_at timestamptz not null default now(),updated_at timestamptz not null default now(),unique(week_start,summary_type))`;
@@ -68,13 +90,22 @@ const validToken = (token) => {
     )
       return false;
     const payload = JSON.parse(Buffer.from(body, "base64url").toString());
-    return payload.exp > Date.now();
+    return payload.exp > Date.now() ? payload : null;
   } catch {
-    return false;
+    return null;
   }
 };
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Juda ko‘p urinish. Keyinroq qayta urinib ko‘ring" },
+});
+app.use(["/api/auth/login", "/api/auth/register"], authLimiter);
 app.use("/api", (req, res, next) => {
-  if (req.path === "/health" || req.path === "/auth/login") return next();
+  if (["/health", "/auth/login", "/auth/register"].includes(req.path))
+    return next();
   if (
     ["/cron/weekly", "/cron/reminders"].includes(req.path) &&
     process.env.CRON_SECRET &&
@@ -82,11 +113,52 @@ app.use("/api", (req, res, next) => {
   )
     return next();
   const token = req.headers.authorization?.replace(/^Bearer\s+/i, "");
-  if (!token || !validToken(token))
+  const payload = token && validToken(token);
+  if (!payload)
     return res.status(401).json({ error: "Avtorizatsiya talab qilinadi" });
+  req.auth = payload;
+  if (
+    payload.role === "STUDENT" &&
+    req.path !== "/student" &&
+    !req.path.startsWith("/student/")
+  )
+    return res.status(403).json({ error: "Bu amal uchun ruxsat yo‘q" });
   next();
 });
-app.post("/api/auth/login", (req, res) => {
+const requireRole = (role) => (req, res, next) =>
+  req.auth?.role === role
+    ? next()
+    : res.status(403).json({ error: "Bu amal uchun ruxsat yo‘q" });
+app.post("/api/auth/register", async (req, res, next) => {
+  try {
+    const firstName = String(req.body.firstName || "").trim(),
+      lastName = String(req.body.lastName || "").trim(),
+      email = String(req.body.email || "").trim().toLowerCase(),
+      phone = String(req.body.phone || "").trim(),
+      password = String(req.body.password || "");
+    if (
+      firstName.length < 2 ||
+      lastName.length < 2 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+      !/^\+?[0-9 ()-]{9,20}$/.test(phone)
+    )
+      return res.status(400).json({ error: "Registratsiya ma’lumotlarini tekshiring" });
+    if (password.length < 8)
+      return res.status(400).json({ error: "Parol kamida 8 belgidan iborat bo‘lsin" });
+    if (password !== String(req.body.confirmPassword || ""))
+      return res.status(400).json({ error: "Parollar bir xil emas" });
+    const hash = await bcrypt.hash(password, 12);
+    const [student] = await sql`insert into students(first_name,last_name,email,phone,password_hash,telegram_username,github_username,direction,enrollment_type,status,joined_date) values(${firstName},${lastName},${email},${phone},${hash},${String(req.body.telegramUsername || "").trim() || null},${String(req.body.githubUsername || "").trim() || null},${String(req.body.direction || "").trim() || null},'individual','active',current_date) returning *`;
+    await sql`insert into notifications(type,student_id,title,message,due_date,dedupe_key,audience,related_url) values('student_registered',${student.id},'Yangi o‘quvchi ro‘yxatdan o‘tdi',${`${firstName} ${lastName} · ${email}`},current_date,${`student_registered:${student.id}`},'ADMIN',${`/students/${student.id}`})`;
+    res.status(201).json({ message: "Registratsiya muvaffaqiyatli" });
+  } catch (e) {
+    if (e.code === "23505")
+      return res.status(409).json({ error: "Bu email avval ro‘yxatdan o‘tgan" });
+    next(e);
+  }
+});
+app.post("/api/auth/login", async (req, res, next) => {
+ try {
   const email = String(req.body.email || "")
     .trim()
     .toLowerCase();
@@ -97,11 +169,25 @@ app.post("/api/auth/login", (req, res) => {
   const passwordOk =
     passwordBuffer.length === expectedBuffer.length &&
     timingSafeEqual(passwordBuffer, expectedBuffer);
-  if (!emailOk || !passwordOk)
+  if (emailOk && passwordOk) {
+    const user = { id: "admin", email, role: "ADMIN", fullName: "Administrator" };
+    return res.json({
+      token: signToken({ sub: email, role: "ADMIN", exp: Date.now() + 12 * 60 * 60 * 1000 }),
+      user,
+    });
+  }
+  const [student] = await sql`select * from students where lower(email)=${email} limit 1`;
+  if (!student?.password_hash || !(await bcrypt.compare(password, student.password_hash)))
     return res.status(401).json({ error: "Login yoki parol noto‘g‘ri" });
+  if (student.status !== "active")
+    return res.status(403).json({ error: "Student hisobi faol emas" });
+  await sql`update students set last_active_at=now() where id=${student.id}`;
+  const user = { id: student.id, email, role: "STUDENT", fullName: `${student.first_name} ${student.last_name}` };
   res.json({
-    token: signToken({ sub: email, exp: Date.now() + 12 * 60 * 60 * 1000 }),
+    token: signToken({ sub: student.id, role: "STUDENT", exp: Date.now() + 12 * 60 * 60 * 1000 }),
+    user,
   });
+ } catch (e) { next(e); }
 });
 const dateOnly = (value) => {
   if (!value) return null;
@@ -116,6 +202,7 @@ const studentOut = (r) => ({
   firstName: r.first_name,
   lastName: r.last_name,
   fullName: `${r.first_name} ${r.last_name}`,
+  email: r.email || null,
   phone: r.phone,
   parentPhone: r.parent_phone,
   groupId: r.group_id,
@@ -128,6 +215,11 @@ const studentOut = (r) => ({
   note: r.note,
   avatarUrl: r.avatar_url,
   status: r.status,
+  telegramUsername: r.telegram_username || null,
+  githubUsername: r.github_username || null,
+  direction: r.direction || null,
+  lastActivity: r.last_active_at || null,
+  createdAt: r.created_at || null,
 });
 const groupOut = (r) => ({
   id: r.id,
@@ -858,7 +950,7 @@ app.get("/api/notifications", async (_req, res, next) => {
   try {
     await checkAllReminders();
     const rows =
-      await sql`select * from notifications order by created_at desc limit 100`;
+      await sql`select * from notifications where audience='ADMIN' order by created_at desc limit 100`;
     res.json(
       rows.map((r) => ({
         id: r.id,
@@ -877,9 +969,18 @@ app.get("/api/notifications", async (_req, res, next) => {
     next(e);
   }
 });
+app.patch("/api/notifications/read-all", async (_req, res, next) => {
+  try {
+    const rows =
+      await sql`update notifications set is_read=true where audience='ADMIN' and is_read=false returning id`;
+    res.json({ updated: rows.length });
+  } catch (e) {
+    next(e);
+  }
+});
 app.patch("/api/notifications/:id/read", async (req, res, next) => {
   try {
-    await sql`update notifications set is_read=true where id=${req.params.id}`;
+    await sql`update notifications set is_read=true where id=${req.params.id} and audience='ADMIN'`;
     res.json({ ok: true });
   } catch (e) {
     next(e);
@@ -983,6 +1084,244 @@ app.patch("/api/alerts/:id", async (req, res, next) => {
     next(e);
   }
 });
+const uploadMaxMb = Math.max(1, Number(process.env.FILE_UPLOAD_MAX_MB) || 10),
+  uploadLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Fayl yuborish limiti oshdi. Keyinroq urinib ko‘ring" },
+  }),
+  upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: uploadMaxMb * 1024 * 1024, files: 1 },
+  }),
+  safeName = (name = "file") =>
+    String(name)
+      .normalize("NFKD")
+      .replace(/[^a-zA-Z0-9._-]/g, "_")
+      .slice(-120),
+  validUrl = (value) => {
+    if (!value) return null;
+    try {
+      const url = new URL(value);
+      return ["http:", "https:"].includes(url.protocol) ? url.toString() : null;
+    } catch {
+      return null;
+    }
+  },
+  submissionOut = (row) => ({
+    id: row.id,
+    studentId: row.student_id,
+    studentName: row.student_name,
+    title: row.title,
+    description: row.description,
+    category: row.category,
+    textContent: row.text_content,
+    githubUrl: row.github_url,
+    demoUrl: row.demo_url,
+    figmaUrl: row.figma_url,
+    externalUrl: row.external_url,
+    status: row.status,
+    score: row.score == null ? null : Number(row.score),
+    adminFeedback: row.admin_feedback,
+    reviewedBy: row.reviewed_by,
+    reviewedAt: row.reviewed_at,
+    revisionNumber: row.revision_number,
+    submittedAt: row.submitted_at,
+    updatedAt: row.updated_at,
+    hasFile: Boolean(row.has_file),
+    fileName: row.file_name || null,
+    fileUrl: row.has_file ? `/api/student/submissions/${row.id}/file` : null,
+  });
+const validateUpload = async (file) => {
+  if (!file) return null;
+  const detected = await fileTypeFromBuffer(file.buffer),
+    allowed = new Set([
+      "application/pdf",
+      "application/zip",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/msword",
+      "image/png",
+      "image/jpeg",
+      "application/x-cfb",
+    ]);
+  if (!detected || !allowed.has(detected.mime))
+    throw Object.assign(new Error("Ruxsat etilmagan yoki noma’lum fayl"), {
+      status: 400,
+    });
+  return {
+    name: safeName(file.originalname),
+    mime: detected.mime,
+    size: file.size,
+    content: file.buffer,
+  };
+};
+const createStudentNotification = (studentId, type, title, message, url, key) =>
+  sql`insert into notifications(type,student_id,title,message,due_date,dedupe_key,audience,related_url) values(${type},${studentId},${title},${message},current_date,${key},'STUDENT',${url}) on conflict(dedupe_key) do nothing`;
+
+app.get("/api/student", requireRole("STUDENT"), async (req, res, next) => {
+  try {
+    const [student] = await sql`select * from students where id=${req.auth.sub}`;
+    const [stats] = await sql`select count(*)::int total,count(*) filter(where status='UNDER_REVIEW')::int under_review,count(*) filter(where status='APPROVED')::int approved,count(*) filter(where status='REVISION_REQUESTED')::int revision_requested,round(avg(score) filter(where score is not null),1) average_score from submissions where student_id=${req.auth.sub}`;
+    const recent = await sql`select s.*,exists(select 1 from submission_files f where f.submission_id=s.id) has_file,(select original_name from submission_files f where f.submission_id=s.id) file_name from submissions s where student_id=${req.auth.sub} order by submitted_at desc limit 5`;
+    const achievements = await sql`select * from achievements where student_id=${req.auth.sub} order by created_at desc`;
+    res.json({ profile: studentOut(student), stats: { ...stats, average_score: Number(stats.average_score || 0) }, recent: recent.map(submissionOut), achievements });
+  } catch (e) { next(e); }
+});
+app.patch("/api/student/profile", requireRole("STUDENT"), async (req, res, next) => {
+  try {
+    const [row] = await sql`update students set first_name=coalesce(${String(req.body.firstName || "").trim() || null},first_name),last_name=coalesce(${String(req.body.lastName || "").trim() || null},last_name),phone=coalesce(${String(req.body.phone || "").trim() || null},phone),telegram_username=coalesce(${String(req.body.telegramUsername || "").trim() || null},telegram_username),github_username=coalesce(${String(req.body.githubUsername || "").trim() || null},github_username),direction=coalesce(${String(req.body.direction || "").trim() || null},direction),updated_at=now() where id=${req.auth.sub} returning *`;
+    res.json(studentOut(row));
+  } catch (e) { next(e); }
+});
+app.post("/api/student/submissions", uploadLimiter, requireRole("STUDENT"), upload.single("file"), async (req, res, next) => {
+  try {
+    const title = String(req.body.title || "").trim(),
+      textContent = String(req.body.textContent || "").trim(),
+      urls = {
+        github: validUrl(req.body.githubUrl),
+        demo: validUrl(req.body.demoUrl),
+        figma: validUrl(req.body.figmaUrl),
+        external: validUrl(req.body.externalUrl),
+      },
+      file = await validateUpload(req.file);
+    if (title.length < 2)
+      return res.status(400).json({ error: "Vazifa nomini kiriting" });
+    if (!textContent && !Object.values(urls).some(Boolean) && !file)
+      return res.status(400).json({ error: "Kamida matn, link yoki fayl yuboring" });
+    const [row] = await sql`insert into submissions(student_id,title,description,category,text_content,github_url,demo_url,figma_url,external_url) values(${req.auth.sub},${title},${String(req.body.description || "").trim()},${String(req.body.category || "Umumiy").trim()},${textContent},${urls.github},${urls.demo},${urls.figma},${urls.external}) returning *`;
+    if (file)
+      await sql`insert into submission_files(submission_id,original_name,mime_type,size_bytes,content) values(${row.id},${file.name},${file.mime},${file.size},${file.content})`;
+    await sql`insert into notifications(type,student_id,title,message,due_date,dedupe_key,audience,related_url) values('new_submission',${req.auth.sub},'Yangi vazifa yuborildi',${title},current_date,${`new_submission:${row.id}`},'ADMIN',${`/submissions/${row.id}`})`;
+    await createStudentNotification(req.auth.sub, "submission_sent", "Vazifa yuborildi", title, `/student/submissions/${row.id}`, `submission_sent:${row.id}`);
+    res.status(201).json(submissionOut({ ...row, has_file: Boolean(file), file_name: file?.name }));
+  } catch (e) { next(e); }
+});
+app.get("/api/student/submissions", requireRole("STUDENT"), async (req, res, next) => {
+  try {
+    const page = Math.max(1, Number(req.query.page) || 1),
+      limit = Math.min(50, Math.max(1, Number(req.query.limit) || 10)),
+      status = req.query.status || null,
+      category = req.query.category || null,
+      search = `%${String(req.query.search || "").trim()}%`,
+      from = req.query.from || null,
+      to = req.query.to || null;
+    const [count] = await sql`select count(*)::int total from submissions where student_id=${req.auth.sub} and (${status}::text is null or status=${status}) and (${category}::text is null or category=${category}) and (title ilike ${search} or description ilike ${search}) and (${from}::date is null or submitted_at::date>=${from}::date) and (${to}::date is null or submitted_at::date<=${to}::date)`;
+    const rows = await sql`select s.*,exists(select 1 from submission_files f where f.submission_id=s.id) has_file,(select original_name from submission_files f where f.submission_id=s.id) file_name from submissions s where student_id=${req.auth.sub} and (${status}::text is null or status=${status}) and (${category}::text is null or category=${category}) and (title ilike ${search} or description ilike ${search}) and (${from}::date is null or submitted_at::date>=${from}::date) and (${to}::date is null or submitted_at::date<=${to}::date) order by submitted_at desc limit ${limit} offset ${(page - 1) * limit}`;
+    res.json({ items: rows.map(submissionOut), page, total: count.total, pages: Math.ceil(count.total / limit) });
+  } catch (e) { next(e); }
+});
+app.get("/api/student/submissions/:id", requireRole("STUDENT"), async (req, res, next) => {
+  try {
+    const [row] = await sql`select s.*,exists(select 1 from submission_files f where f.submission_id=s.id) has_file,(select original_name from submission_files f where f.submission_id=s.id) file_name from submissions s where id=${req.params.id} and student_id=${req.auth.sub}`;
+    if (!row) return res.status(404).json({ error: "Vazifa topilmadi" });
+    const revisions = await sql`select id,revision_number,snapshot,feedback,score,submitted_at from submission_revisions where submission_id=${row.id} order by revision_number desc`;
+    res.json({ ...submissionOut(row), revisions });
+  } catch (e) { next(e); }
+});
+app.post("/api/student/submissions/:id/revisions", uploadLimiter, requireRole("STUDENT"), upload.single("file"), async (req, res, next) => {
+  try {
+    const [current] = await sql`select * from submissions where id=${req.params.id} and student_id=${req.auth.sub}`;
+    if (!current) return res.status(404).json({ error: "Vazifa topilmadi" });
+    if (current.status !== "REVISION_REQUESTED")
+      return res.status(409).json({ error: "Faqat qayta ishlash so‘ralgan vazifa yuboriladi" });
+    await sql`insert into submission_revisions(submission_id,revision_number,snapshot,feedback,score) values(${current.id},${current.revision_number},${JSON.stringify(current)}::jsonb,${current.admin_feedback},${current.score}) on conflict do nothing`;
+    const file = await validateUpload(req.file),
+      nextRevision = current.revision_number + 1,
+      text = String(req.body.textContent ?? current.text_content).trim(),
+      github = validUrl(req.body.githubUrl) || current.github_url,
+      demo = validUrl(req.body.demoUrl) || current.demo_url,
+      figma = validUrl(req.body.figmaUrl) || current.figma_url,
+      external = validUrl(req.body.externalUrl) || current.external_url;
+    if (!text && !github && !demo && !figma && !external && !file)
+      return res.status(400).json({ error: "Kamida matn, link yoki fayl yuboring" });
+    const [row] = await sql`update submissions set text_content=${text},github_url=${github},demo_url=${demo},figma_url=${figma},external_url=${external},status='SUBMITTED',score=null,admin_feedback='',reviewed_at=null,reviewed_by=null,revision_number=${nextRevision},submitted_at=now(),updated_at=now() where id=${current.id} returning *`;
+    if (file)
+      await sql`insert into submission_files(submission_id,original_name,mime_type,size_bytes,content) values(${row.id},${file.name},${file.mime},${file.size},${file.content}) on conflict(submission_id) do update set original_name=excluded.original_name,mime_type=excluded.mime_type,size_bytes=excluded.size_bytes,content=excluded.content,created_at=now()`;
+    await sql`insert into notifications(type,student_id,title,message,due_date,dedupe_key,audience,related_url) values('resubmission',${req.auth.sub},'Vazifa qayta yuborildi',${row.title},current_date,${`resubmission:${row.id}:${nextRevision}`},'ADMIN',${`/submissions/${row.id}`})`;
+    res.json(submissionOut({ ...row, has_file: Boolean(file), file_name: file?.name }));
+  } catch (e) { next(e); }
+});
+app.get("/api/student/submissions/:id/file", requireRole("STUDENT"), async (req, res, next) => {
+  try {
+    const [file] = await sql`select f.* from submission_files f join submissions s on s.id=f.submission_id where s.id=${req.params.id} and s.student_id=${req.auth.sub}`;
+    if (!file) return res.status(404).json({ error: "Fayl topilmadi" });
+    res.setHeader("Content-Type", file.mime_type);
+    res.setHeader("Content-Disposition", `attachment; filename="${safeName(file.original_name)}"`);
+    res.send(Buffer.from(file.content));
+  } catch (e) { next(e); }
+});
+app.get("/api/student/notifications", requireRole("STUDENT"), async (req, res, next) => {
+  try {
+    const rows = await sql`select * from notifications where audience='STUDENT' and student_id=${req.auth.sub} order by created_at desc limit 100`;
+    res.json(rows.map((r) => ({ id:r.id,title:r.title,message:r.message,isRead:r.is_read,relatedUrl:r.related_url,createdAt:r.created_at })));
+  } catch (e) { next(e); }
+});
+app.patch("/api/student/notifications/read-all", requireRole("STUDENT"), async (req, res, next) => {
+  try {
+    const rows = await sql`update notifications set is_read=true where audience='STUDENT' and student_id=${req.auth.sub} and is_read=false returning id`;
+    res.json({ updated: rows.length });
+  } catch (e) { next(e); }
+});
+
+app.get("/api/admin/students", requireRole("ADMIN"), async (req, res, next) => {
+  try {
+    const rows = await sql`select s.id,s.first_name,s.last_name,s.email,s.phone,s.created_at,s.status,s.last_active_at,count(x.id)::int total_submissions,count(x.id) filter(where x.status='UNDER_REVIEW')::int under_review,count(x.id) filter(where x.status='APPROVED')::int approved,round(avg(x.score) filter(where x.score is not null),1) average_score from students s left join submissions x on x.student_id=s.id group by s.id order by s.created_at desc`;
+    res.json(rows.map((r) => ({ id:r.id,fullName:`${r.first_name} ${r.last_name}`,email:r.email,phone:r.phone,registeredAt:r.created_at,status:r.status,lastActivity:r.last_active_at,totalSubmissions:r.total_submissions,underReview:r.under_review,approved:r.approved,averageScore:Number(r.average_score || 0) })));
+  } catch (e) { next(e); }
+});
+app.patch("/api/admin/students/:id/status", requireRole("ADMIN"), async (req, res, next) => {
+  try {
+    const status = String(req.body.status || "").toLowerCase();
+    if (!['active','suspended'].includes(status)) return res.status(400).json({ error:"Status noto‘g‘ri" });
+    const [row] = await sql`update students set status=${status},updated_at=now() where id=${req.params.id} returning id,status`;
+    res.json(row);
+  } catch (e) { next(e); }
+});
+app.get("/api/admin/submissions", requireRole("ADMIN"), async (req, res, next) => {
+  try {
+    const page=Math.max(1,Number(req.query.page)||1),limit=Math.min(50,Math.max(1,Number(req.query.limit)||15)),status=req.query.status||null,student=req.query.student||null,category=req.query.category||null,search=`%${String(req.query.search||'').trim()}%`;
+    const [count]=await sql`select count(*)::int total from submissions x join students s on s.id=x.student_id where (${status}::text is null or x.status=${status}) and (${student}::uuid is null or x.student_id=${student}::uuid) and (${category}::text is null or x.category=${category}) and (x.title ilike ${search} or (s.first_name||' '||s.last_name) ilike ${search})`;
+    const rows=await sql`select x.*,(s.first_name||' '||s.last_name) student_name,exists(select 1 from submission_files f where f.submission_id=x.id) has_file,(select original_name from submission_files f where f.submission_id=x.id) file_name from submissions x join students s on s.id=x.student_id where (${status}::text is null or x.status=${status}) and (${student}::uuid is null or x.student_id=${student}::uuid) and (${category}::text is null or x.category=${category}) and (x.title ilike ${search} or (s.first_name||' '||s.last_name) ilike ${search}) order by case x.status when 'SUBMITTED' then 1 when 'UNDER_REVIEW' then 2 else 3 end,x.submitted_at desc limit ${limit} offset ${(page-1)*limit}`;
+    res.json({items:rows.map(submissionOut),page,total:count.total,pages:Math.ceil(count.total/limit)});
+  } catch(e){next(e);}
+});
+app.get("/api/admin/submissions/:id", requireRole("ADMIN"), async (req,res,next)=>{
+  try{
+    const [row]=await sql`select x.*,(s.first_name||' '||s.last_name) student_name,exists(select 1 from submission_files f where f.submission_id=x.id) has_file,(select original_name from submission_files f where f.submission_id=x.id) file_name from submissions x join students s on s.id=x.student_id where x.id=${req.params.id}`;
+    if(!row)return res.status(404).json({error:"Vazifa topilmadi"});
+    const revisions=await sql`select * from submission_revisions where submission_id=${row.id} order by revision_number desc`;
+    res.json({...submissionOut(row),revisions,fileUrl:row.has_file?`/api/admin/submissions/${row.id}/file`:null});
+  }catch(e){next(e);}
+});
+app.get("/api/admin/submissions/:id/file", requireRole("ADMIN"), async(req,res,next)=>{
+  try{const [file]=await sql`select * from submission_files where submission_id=${req.params.id}`;if(!file)return res.status(404).json({error:"Fayl topilmadi"});res.setHeader("Content-Type",file.mime_type);res.setHeader("Content-Disposition",`attachment; filename="${safeName(file.original_name)}"`);res.send(Buffer.from(file.content));}catch(e){next(e);}
+});
+app.patch("/api/admin/submissions/:id/review", requireRole("ADMIN"), async(req,res,next)=>{
+  try{
+    const status=String(req.body.status||'').toUpperCase(),score=req.body.score===''||req.body.score==null?null:Number(req.body.score),feedback=String(req.body.feedback||'').trim();
+    if(!['UNDER_REVIEW','REVISION_REQUESTED','APPROVED','REJECTED'].includes(status))return res.status(400).json({error:"Status noto‘g‘ri"});
+    if(score!=null&&(!Number.isInteger(score)||score<0||score>100))return res.status(400).json({error:"Ball 0–100 oralig‘ida bo‘lsin"});
+    if(['REVISION_REQUESTED','REJECTED'].includes(status)&&!feedback)return res.status(400).json({error:"Bu status uchun feedback majburiy"});
+    if(status==='APPROVED'&&score==null)return res.status(400).json({error:"Qabul qilishda ball kiriting"});
+    const [row]=await sql`update submissions set status=${status},score=${score},admin_feedback=${feedback},reviewed_by=${req.auth.sub},reviewed_at=now(),updated_at=now() where id=${req.params.id} returning *`;
+    if(!row)return res.status(404).json({error:"Vazifa topilmadi"});
+    const labels={UNDER_REVIEW:'Tekshirish boshlandi',REVISION_REQUESTED:'Qayta ishlash kerak',APPROVED:'Vazifa qabul qilindi',REJECTED:'Vazifa rad etildi'};
+    await createStudentNotification(row.student_id,`submission_${status.toLowerCase()}`,labels[status],feedback||row.title,`/student/submissions/${row.id}`,`review:${row.id}:${row.revision_number}:${status}`);
+    await sql`insert into student_progress_events(student_id,type,title,description,value,metadata) values(${row.student_id},'grade_added',${labels[status]},${feedback},${score},${JSON.stringify({submissionId:row.id,status})}::jsonb)`;
+    if(score===100){
+      await sql`insert into achievements(student_id,type,title,description,submission_id) values(${row.student_id},'PERFECT_SCORE','Perfect Score','Vazifadan 100/100 natija',${row.id}) on conflict do nothing`;
+      await createStudentNotification(row.student_id,'achievement','Perfect Score!','Siz 100/100 ball oldingiz',`/student/submissions/${row.id}`,`perfect_score:${row.id}`);
+      const perfect=await sql`select score from submissions where student_id=${row.student_id} and status='APPROVED' and score is not null order by reviewed_at desc limit 3`;
+      if(perfect.length===3&&perfect.every(x=>Number(x.score)===100)){
+        await sql`insert into achievements(student_id,type,title,description,submission_id) values(${row.student_id},'PERFECT_STREAK','Perfect Streak','Ketma-ket 3 ta 100/100 natija',${row.id}) on conflict do nothing`;
+        await createStudentNotification(row.student_id,'achievement','Perfect Streak!','Ketma-ket 3 ta vazifadan 100/100',`/student`, `perfect_streak:${row.id}`);
+      }
+    }
+    res.json(submissionOut(row));
+  }catch(e){next(e);}
+});
 setTimeout(() => checkAllReminders().catch(console.error), 5000);
 setTimeout(() => generateSmartAlerts().catch(console.error), 8000);
 setInterval(
@@ -1002,8 +1341,16 @@ setInterval(
 );
 app.use((err, _req, res, _next) => {
   console.error(err);
-  res.status(err.code === "23505" ? 409 : 500).json({
-    error: err.code === "23505" ? "Bu ma’lumot avval mavjud" : "Server xatosi",
+  const status = err.status || (err.code === "LIMIT_FILE_SIZE" ? 413 : err.code === "23505" ? 409 : 500);
+  res.status(status).json({
+    error:
+      err.code === "LIMIT_FILE_SIZE"
+        ? `Fayl ${uploadMaxMb} MB dan oshmasin`
+        : err.code === "23505"
+          ? "Bu ma’lumot avval mavjud"
+          : status < 500
+            ? err.message
+            : "Server xatosi",
   });
 });
 const PORT = process.env.PORT || 5000;
