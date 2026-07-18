@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Download, ExternalLink, RotateCcw } from "lucide-react";
+import { Download, ExternalLink, FileUp, Paperclip, RotateCcw, X } from "lucide-react";
 import { toast } from "sonner";
 import { download, request } from "../services/storage";
 
@@ -11,11 +11,17 @@ const labels = {
   APPROVED: "Qabul qilindi",
   REJECTED: "Rad etildi",
 };
+const fileSize = (bytes) =>
+  bytes < 1024 * 1024
+    ? `${Math.ceil(bytes / 1024)} KB`
+    : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
 export function StudentSubmissionDetailPage() {
   const { id } = useParams();
   const [item, setItem] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [revisionFiles, setRevisionFiles] = useState([]);
+  const revisionInputRef = useRef(null);
   const load = useCallback(
     () => request(`/api/student/submissions/${id}`).then(setItem),
     [id]
@@ -27,10 +33,14 @@ export function StudentSubmissionDetailPage() {
     event.preventDefault();
     setLoading(true);
     try {
+      const form = new FormData(event.currentTarget);
+      form.delete("files");
+      revisionFiles.forEach((file) => form.append("files", file));
       await request(`/api/student/submissions/${id}/revisions`, {
         method: "POST",
-        body: new FormData(event.currentTarget),
+        body: form,
       });
+      setRevisionFiles([]);
       toast.success("Vazifa qayta yuborildi");
       await load();
     } catch {
@@ -146,10 +156,47 @@ export function StudentSubmissionDetailPage() {
                 defaultValue={item.demoUrl || ""}
               />
             </label>
-            <label className="span-2">
-              Yangi fayllar
-              <input name="files" type="file" multiple />
-            </label>
+            <div className="span-2 revision-upload">
+              <button
+                type="button"
+                className={`custom-file multi-file-picker ${revisionFiles.length ? "has-file" : ""}`}
+                onClick={() => revisionInputRef.current?.click()}
+              >
+                <input
+                  ref={revisionInputRef}
+                  name="files"
+                  type="file"
+                  multiple
+                  onChange={(event) => {
+                    setRevisionFiles((current) => [
+                      ...current,
+                      ...Array.from(event.target.files || []),
+                    ]);
+                    event.target.value = "";
+                  }}
+                />
+                <span className="custom-file__icon"><FileUp /></span>
+                <span>
+                  <strong>{revisionFiles.length ? `${revisionFiles.length} ta fayl tanlandi` : "Yangi fayllarni tanlang"}</strong>
+                  <small>Bir vaqtning o‘zida bir nechta fayl tanlash mumkin</small>
+                </span>
+              </button>
+              {revisionFiles.length > 0 && (
+                <div className="selected-file-list revision-file-list">
+                  {revisionFiles.map((file, index) => (
+                    <div key={`${file.name}-${file.lastModified}-${index}`}>
+                      <Paperclip />
+                      <span><strong>{file.name}</strong><small>{fileSize(file.size)}</small></span>
+                      <button
+                        type="button"
+                        aria-label={`${file.name} faylini olib tashlash`}
+                        onClick={() => setRevisionFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))}
+                      ><X /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="form-actions span-2">
               <button className="btn btn--primary" disabled={loading}>
                 {loading ? "Yuborilmoqda..." : "Qayta yuborish"}

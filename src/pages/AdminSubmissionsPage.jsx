@@ -21,17 +21,24 @@ export function AdminSubmissionsPage() {
     [preview, setPreview] = useState(null),
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
-  const load = useCallback(() =>
-    request(
-      `/api/admin/submissions?page=${page}&search=${encodeURIComponent(q)}&status=${status}&period=${period}`,
-    )
-      .then((result) => {
-        setData(result);
-        setError("");
-      })
-      .catch(() =>
-        setError("Backend yangilanmagan. Render backendni qayta deploy qiling."),
-      ), [page, period, q, status]);
+  const load = useCallback(
+    () =>
+      request(
+        `/api/admin/submissions?page=${page}&search=${encodeURIComponent(
+          q
+        )}&status=${status}&period=${period}`
+      )
+        .then((result) => {
+          setData(result);
+          setError("");
+        })
+        .catch(() =>
+          setError(
+            "Backend yangilanmagan. Render backendni qayta deploy qiling."
+          )
+        ),
+    [page, period, q, status]
+  );
   useEffect(() => {
     load();
   }, [load]);
@@ -41,9 +48,14 @@ export function AdminSubmissionsPage() {
     setSelected(null);
   };
   const previewFile = async (file) => {
-    const supported = file?.mimeType?.startsWith("image/") || file?.mimeType === "application/pdf" || file?.mimeType?.startsWith("text/");
+    const supported =
+      file?.mimeType?.startsWith("image/") ||
+      file?.mimeType === "application/pdf" ||
+      file?.mimeType?.startsWith("text/");
     if (!supported) {
-      toast.info("Bu fayl turi brauzerda ko‘rsatilmaydi, yuklab olishingiz mumkin");
+      toast.info(
+        "Bu fayl turi brauzerda ko‘rsatilmaydi, yuklab olishingiz mumkin"
+      );
       return;
     }
     if (preview?.src) URL.revokeObjectURL(preview.src);
@@ -53,7 +65,12 @@ export function AdminSubmissionsPage() {
   const open = async (id) => {
     const row = await request(`/api/admin/submissions/${id}`);
     setSelected(row);
-    const first = (row.files || []).find((file) => file.mimeType?.startsWith("image/") || file.mimeType === "application/pdf" || file.mimeType?.startsWith("text/"));
+    const first = (row.files || []).find(
+      (file) =>
+        file.mimeType?.startsWith("image/") ||
+        file.mimeType === "application/pdf" ||
+        file.mimeType?.startsWith("text/")
+    );
     if (first) await previewFile(first);
   };
   const review = async (e) => {
@@ -77,7 +94,9 @@ export function AdminSubmissionsPage() {
   const counts = data.counts || {
     submitted: data.items.filter((x) => x.status === "SUBMITTED").length,
     underReview: data.items.filter((x) => x.status === "UNDER_REVIEW").length,
-    revisionRequested: data.items.filter((x) => x.status === "REVISION_REQUESTED").length,
+    revisionRequested: data.items.filter(
+      (x) => x.status === "REVISION_REQUESTED"
+    ).length,
   };
   return (
     <>
@@ -148,7 +167,7 @@ export function AdminSubmissionsPage() {
                   </td>
                   <td>
                     {x.title}
-                    <small>Versiya {x.revisionNumber}</small>
+                    <small  className="submission-title">Versiya {x.revisionNumber}</small>
                   </td>
                   <td>{x.category}</td>
                   <td>{new Date(x.submittedAt).toLocaleDateString("uz-UZ")}</td>
@@ -162,7 +181,7 @@ export function AdminSubmissionsPage() {
                   <td>
                     {x.hasFile ? "Fayl" : ""}{" "}
                     {[x.githubUrl, x.demoUrl, x.figmaUrl, x.externalUrl].some(
-                      Boolean,
+                      Boolean
                     )
                       ? "Link"
                       : ""}
@@ -219,13 +238,60 @@ export function AdminSubmissionsPage() {
                   )}
                   {(selected.files || []).map((file) => (
                     <span className="admin-file-actions" key={file.id}>
-                      <button type="button" className="btn" onClick={() => previewFile(file)}><Eye />{file.name}</button>
-                      <button type="button" className="icon-btn" aria-label={`${file.name} faylini yuklab olish`} onClick={() => download(file.url, file.name)}><Download /></button>
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => previewFile(file)}
+                      >
+                        <Eye />
+                        {file.name}
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        aria-label={`${file.name} faylini yuklab olish`}
+                        onClick={() => download(file.url, file.name)}
+                      >
+                        <Download />
+                      </button>
                     </span>
                   ))}
-                  {!selected.files?.length && selected.hasFile && <button type="button" className="btn" onClick={() => download(selected.fileUrl, selected.fileName)}><Download />{selected.fileName}</button>}
+                  {!selected.files?.length && selected.hasFile && (
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() =>
+                        download(selected.fileUrl, selected.fileName)
+                      }
+                    >
+                      <Download />
+                      {selected.fileName}
+                    </button>
+                  )}
                 </div>
-                {preview && <section className="admin-file-preview"><header><strong>{preview.name}</strong><button type="button" className="icon-btn" onClick={() => download(preview.url, preview.name)} aria-label="Faylni yuklab olish"><Download /></button></header>{preview.mimeType.startsWith("image/") ? <img src={preview.src} alt={preview.name} /> : <iframe src={preview.src} title={`${preview.name} ko‘rinishi`} />}</section>}
+                {preview && (
+                  <section className="admin-file-preview">
+                    <header>
+                      <strong>{preview.name}</strong>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={() => download(preview.url, preview.name)}
+                        aria-label="Faylni yuklab olish"
+                      >
+                        <Download />
+                      </button>
+                    </header>
+                    {preview.mimeType.startsWith("image/") ? (
+                      <img src={preview.src} alt={preview.name} />
+                    ) : (
+                      <iframe
+                        src={preview.src}
+                        title={`${preview.name} ko‘rinishi`}
+                      />
+                    )}
+                  </section>
+                )}
               </div>
               <form className="form-grid" onSubmit={review}>
                 <label>

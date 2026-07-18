@@ -64,7 +64,9 @@ export function StudentsPage() {
   }, [students]);
   useEffect(() => {
     request("/api/admin/students")
-      .then((rows) => setSubmissionStats(Object.fromEntries(rows.map((row) => [row.id, row]))))
+      .then((rows) =>
+        setSubmissionStats(Object.fromEntries(rows.map((row) => [row.id, row])))
+      )
       .catch(() => setSubmissionStats({}));
   }, [students]);
   const rows = useMemo(
@@ -76,7 +78,8 @@ export function StudentsPage() {
               (group === "individual"
                 ? s.enrollmentType === "individual"
                 : s.groupId === group)) &&
-            (status === "all" || (s.accountStatus || "NOT_ACTIVATED") === status) &&
+            (status === "all" ||
+              (s.accountStatus || "NOT_ACTIVATED") === status) &&
             matchesMastery(insightScores[s.id], mastery)
         ),
       [students, q, group, status, mastery, insightScores]
@@ -249,8 +252,11 @@ export function StudentsPage() {
                       </div>
                       <div>
                         <strong>{s.fullName}</strong>
-                        <small>{s.nickname ? `@${s.nickname}` : "Nickname belgilanmagan"}</small>
-                        <StatusBadge status={s.accountStatus || "NOT_ACTIVATED"} />
+                        <small>
+                          {s.nickname
+                            ? `@${s.nickname}`
+                            : "Nickname belgilanmagan"}
+                        </small>
                       </div>
                     </div>
                   </td>
@@ -277,7 +283,9 @@ export function StudentsPage() {
                   </td>
                   <td>
                     {s.joinedDate}
-                    <small className="nowrap">{studyDuration(s.joinedDate)}dan beri o‘qiyapti</small>
+                    <small className="nowrap">
+                      {studyDuration(s.joinedDate)}dan beri o‘qiyapti
+                    </small>
                   </td>
                   <td>
                     <strong>{analyticsService.studentAttendance(s.id)}%</strong>
@@ -302,8 +310,12 @@ export function StudentsPage() {
                     )}
                   </td>
                   <td>
-                    <strong>{submissionStats[s.id]?.totalSubmissions || 0}</strong>
-                    <small>O‘rtacha: {submissionStats[s.id]?.averageScore || 0}/100</small>
+                    <strong>
+                      {submissionStats[s.id]?.totalSubmissions || 0}
+                    </strong>
+                    <small className="submission-title">
+                      O‘rtacha: {submissionStats[s.id]?.averageScore || 0}/100
+                    </small>
                   </td>
                   <td>
                     <StatusBadge
