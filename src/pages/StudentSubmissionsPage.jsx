@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Search } from "lucide-react";
+import { Search, Eye } from "lucide-react";
 import { AppSelect } from "../components/ui/AppSelect";
 import { request } from "../services/storage";
 const labels = {
@@ -20,7 +20,9 @@ export function StudentSubmissionsPage() {
   useEffect(() => {
     setLoading(true);
     request(
-      `/api/student/submissions?page=${page}&search=${encodeURIComponent(q)}&status=${status}`,
+      `/api/student/submissions?page=${page}&search=${encodeURIComponent(
+        q
+      )}&status=${status}`
     )
       .then(setData)
       .catch(() => setError("Vazifalarni yuklab bo‘lmadi"))
@@ -72,6 +74,7 @@ export function StudentSubmissionsPage() {
                 <th>Status</th>
                 <th>Ball</th>
                 <th>Feedback</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>

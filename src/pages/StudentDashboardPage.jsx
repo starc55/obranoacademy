@@ -1,6 +1,22 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Send, Trophy } from "lucide-react";
+import {
+  Send,
+  Trophy,
+  CheckCircle2,
+  Clock3,
+  TrendingUp,
+  RotateCcw,
+} from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { request } from "../services/storage";
 import { SubmissionModal } from "../components/students/SubmissionModal";
 
@@ -11,15 +27,21 @@ const statusLabel = {
   APPROVED: "Qabul qilindi",
   REJECTED: "Rad etildi",
 };
+
 export function StudentDashboardPage() {
-  const [data, setData] = useState(null),
-    [error, setError] = useState(""),
-    [submitOpen, setSubmitOpen] = useState(false);
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const [submitOpen, setSubmitOpen] = useState(false);
+  const load = useCallback(
+    () =>
+      request("/api/student")
+        .then(setData)
+        .catch(() => setError("Ma’lumotlarni yuklab bo‘lmadi")),
+    []
+  );
   useEffect(() => {
-    request("/api/student")
-      .then(setData)
-      .catch(() => setError("Ma’lumotlarni yuklab bo‘lmadi"));
-  }, []);
+    load();
+  }, [load]);
   if (error)
     return (
       <div className="empty">
@@ -34,31 +56,148 @@ export function StudentDashboardPage() {
       </div>
     );
   const s = data.stats;
+  const chartData = data.recent
+    .slice()
+    .reverse()
+    .map((item) => ({
+      name: item.title.length > 12 ? `${item.title.slice(0, 12)}…` : item.title,
+      ball: item.score ?? 0,
+    }));
+  const cards = [
+    ["Jami yuborilgan", s.total, Send, "blue"],
+    ["Tekshirilmoqda", s.under_review, Clock3, "amber"],
+    ["Qabul qilingan", s.approved, CheckCircle2, "green"],
+    ["Qayta ishlash", s.revision_requested, RotateCcw, "red"],
+    ["O‘rtacha ball", s.average_score, TrendingUp, "purple"],
+  ];
   return (
     <>
-      <div className="page-head">
+      <div className="page-head student-welcome">
         <div>
+          <span className="eyebrow">SHAXSIY NATIJALAR</span>
           <h2>Salom, {data.profile.firstName}</h2>
-          <p>Vazifalaringiz va so‘nggi natijalaringiz.</p>
+          <p>
+            Natijalaringiz, rivojlanish dinamikasi va so‘nggi vazifalaringiz.
+          </p>
         </div>
-        <button className="btn btn--primary" onClick={() => setSubmitOpen(true)}>
+        <button
+          className="btn btn--primary"
+          onClick={() => setSubmitOpen(true)}
+        >
           <Send />
           Yangi vazifa yuborish
         </button>
       </div>
       <div className="stats-grid student-stats">
-        {[
-          ["Jami yuborilgan", s.total],
-          ["Tekshirilmoqda", s.under_review],
-          ["Qabul qilingan", s.approved],
-          ["Qayta ishlash", s.revision_requested],
-          ["O‘rtacha ball", s.average_score],
-        ].map(([l, v]) => (
-          <article className="stat-card" key={l}>
-            <strong>{v || 0}</strong>
-            <p>{l}</p>
+        {cards.map(([label, value, Icon, tone]) => (
+          <article
+            className={`stat-card student-stat-card tone-${tone}`}
+            key={label}
+          >
+            <span className="student-stat-icon">
+              <Icon />
+            </span>
+            <div>
+              <strong>{value || 0}</strong>
+              <p>{label}</p>
+            </div>
           </article>
         ))}
+      </div>
+      <div className="student-dashboard-grid">
+        <section className="panel student-progress-panel">
+          <header className="section-head">
+            <div>
+              <h3>Rivojlanish dinamikasi</h3>
+              <p>Tekshirilgan so‘nggi vazifalardagi ballaringiz</p>
+            </div>
+            <TrendingUp />
+          </header>
+          {chartData.some((item) => item.ball > 0) ? (
+            <div className="student-chart">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart
+                  data={chartData}
+                  margin={{ top: 10, right: 10, left: -24, bottom: 0 }}
+                >
+                  <defs>
+                    <linearGradient
+                      id="studentScore"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop
+                        offset="5%"
+                        stopColor="var(--accent)"
+                        stopOpacity={0.3}
+                      />
+                      <stop
+                        offset="95%"
+                        stopColor="var(--accent)"
+                        stopOpacity={0}
+                      />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    vertical={false}
+                    stroke="var(--border)"
+                  />
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fill: "var(--text-secondary)", fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    domain={[0, 100]}
+                    tick={{ fill: "var(--text-secondary)", fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: "var(--surface)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 12,
+                      color: "var(--text-primary)",
+                    }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="ball"
+                    stroke="var(--accent)"
+                    strokeWidth={3}
+                    fill="url(#studentScore)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="empty compact">
+              Chart uchun tekshirilgan vazifalar hali yetarli emas
+            </div>
+          )}
+        </section>
+        <section className="panel student-progress-summary">
+          <span>Umumiy natija</span>
+          <strong>
+            {s.average_score || 0}
+            <small>/100</small>
+          </strong>
+          <div className="progress">
+            <i style={{ "--w": `${s.average_score || 0}%` }} />
+          </div>
+          <p>
+            {Number(s.average_score) >= 80
+              ? "Ajoyib natija — shu tempni saqlang."
+              : Number(s.average_score) >= 60
+              ? "Yaxshi, keyingi vazifada natijani oshiring."
+              : "Vazifalarni muntazam topshirib rivojlanishni boshlang."}
+          </p>
+        </section>
       </div>
       {data.achievements.length > 0 && (
         <section className="panel achievement-panel">
@@ -68,23 +207,23 @@ export function StudentDashboardPage() {
             </h3>
           </header>
           <div className="achievement-list">
-            {data.achievements.map((a) => (
-              <div key={a.id}>
+            {data.achievements.map((achievement) => (
+              <div key={achievement.id}>
                 <Trophy />
                 <span>
-                  <strong>{a.title}</strong>
-                  <small>{a.description}</small>
+                  <strong>{achievement.title}</strong>
+                  <small>{achievement.description}</small>
                 </span>
               </div>
             ))}
           </div>
         </section>
       )}
-      <section className="table-card">
+      <section className="table-card student-recent-table">
         <header className="section-head">
           <div>
             <h3>Oxirgi vazifalar</h3>
-            <p>So‘nggi yuborilgan ishlar</p>
+            <p>Vazifa nomini bosib yuborgan materiallaringizni ko‘ring</p>
           </div>
           <Link to="/student/submissions">Barchasi</Link>
         </header>
@@ -100,23 +239,25 @@ export function StudentDashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {data.recent.map((x) => (
-                <tr key={x.id}>
+              {data.recent.map((item) => (
+                <tr key={item.id}>
                   <td>
-                    <Link to={`/student/submissions/${x.id}`}>
-                      <strong>{x.title}</strong>
+                    <Link to={`/student/submissions/${item.id}`}>
+                      <strong>{item.title}</strong>
                     </Link>
                   </td>
-                  <td>{x.category}</td>
+                  <td>{item.category}</td>
                   <td>
                     <span
-                      className={`submission-status status-${x.status.toLowerCase()}`}
+                      className={`submission-status status-${item.status.toLowerCase()}`}
                     >
-                      {statusLabel[x.status]}
+                      {statusLabel[item.status]}
                     </span>
                   </td>
-                  <td>{x.score ?? "—"}</td>
-                  <td>{new Date(x.submittedAt).toLocaleDateString("uz-UZ")}</td>
+                  <td>{item.score ?? "—"}</td>
+                  <td>
+                    {new Date(item.submittedAt).toLocaleDateString("uz-UZ")}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -129,7 +270,7 @@ export function StudentDashboardPage() {
       <SubmissionModal
         open={submitOpen}
         onClose={() => setSubmitOpen(false)}
-        onCreated={() => request("/api/student").then(setData)}
+        onCreated={load}
       />
     </>
   );

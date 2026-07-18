@@ -120,6 +120,15 @@ export async function saveSettings(settings) {
     body: JSON.stringify(settings),
   });
 }
+export async function fetchFileBlob(url) {
+  const response = await fetch(`${API_URL}${url}`, {
+    headers: localStorage.getItem(SESSION_KEY)
+      ? { Authorization: `Bearer ${localStorage.getItem(SESSION_KEY)}` }
+      : {},
+  });
+  if (!response.ok) throw new Error("Faylni ochib bo‘lmadi");
+  return response.blob();
+}
 export async function download(url, fileName = "download") {
   const response = await fetch(`${API_URL}${url}`, {
     headers: localStorage.getItem(SESSION_KEY)

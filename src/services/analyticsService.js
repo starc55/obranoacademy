@@ -1,5 +1,6 @@
 import { readDB } from "./storage";
 import { paymentsService } from "./paymentsService";
+import { isAttendanceSessionScheduled } from "../utils/schedule";
 const rate = (records) =>
   records.length
     ? Math.round(
@@ -11,16 +12,18 @@ const rate = (records) =>
     : 0;
 export const analyticsService = {
   studentAttendance(studentId) {
+    const db = readDB();
     return rate(
-      readDB()
-        .attendance.flatMap((a) => a.records)
+      db.attendance
+        .filter((session) => isAttendanceSessionScheduled(session, db))
+        .flatMap((a) => a.records)
         .filter((r) => r.studentId === studentId),
     );
   },
   groupAttendance(groupId) {
+    const db = readDB();
     return rate(
-      readDB()
-        .attendance.filter((a) => a.groupId === groupId)
+      db.attendance.filter((a) => a.groupId === groupId && isAttendanceSessionScheduled(a, db))
         .flatMap((a) => a.records),
     );
   },
@@ -31,8 +34,10 @@ export const analyticsService = {
     return rows[0] ? paymentsService.status(rows[0]) : "debt";
   },
   studentAbsences(studentId) {
-    return readDB()
-      .attendance.flatMap((a) => a.records)
+    const db = readDB();
+    return db.attendance
+      .filter((session) => isAttendanceSessionScheduled(session, db))
+      .flatMap((a) => a.records)
       .filter((r) => r.studentId === studentId && r.status === "not_entered")
       .length;
   },

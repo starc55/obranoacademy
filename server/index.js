@@ -43,6 +43,8 @@ await sql`create index if not exists submissions_status_idx on submissions(statu
 await sql`create index if not exists submissions_category_idx on submissions(category)`;
 await sql`create table if not exists submission_revisions(id uuid primary key default gen_random_uuid(),submission_id uuid not null references submissions(id) on delete cascade,revision_number integer not null,snapshot jsonb not null,feedback text not null default '',score smallint,submitted_at timestamptz not null default now(),unique(submission_id,revision_number))`;
 await sql`create table if not exists submission_files(id uuid primary key default gen_random_uuid(),submission_id uuid not null unique references submissions(id) on delete cascade,original_name text not null,mime_type text not null,size_bytes integer not null,content bytea not null,created_at timestamptz not null default now())`;
+await sql`alter table submission_files drop constraint if exists submission_files_submission_id_key`;
+await sql`create index if not exists submission_files_submission_idx on submission_files(submission_id,created_at)`;
 await sql`create table if not exists achievements(id uuid primary key default gen_random_uuid(),student_id uuid not null references students(id) on delete cascade,type text not null,title text not null,description text not null default '',submission_id uuid references submissions(id) on delete set null,created_at timestamptz not null default now())`;
 await sql`create unique index if not exists achievements_perfect_submission_unique on achievements(submission_id,type) where submission_id is not null`;
 await sql`create table if not exists admin_notes(id uuid primary key default gen_random_uuid(),student_id uuid not null references students(id) on delete cascade,note text not null,created_by text not null,created_at timestamptz not null default now())`;
@@ -1111,8 +1113,7 @@ app.patch("/api/alerts/:id", async (req, res, next) => {
     next(e);
   }
 });
-const uploadMaxMb = Math.max(1, Number(process.env.FILE_UPLOAD_MAX_MB) || 10),
-  uploadLimiter = rateLimit({
+const uploadLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 30,
     standardHeaders: true,
@@ -1121,7 +1122,6 @@ const uploadMaxMb = Math.max(1, Number(process.env.FILE_UPLOAD_MAX_MB) || 10),
   }),
   upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: uploadMaxMb * 1024 * 1024, files: 1 },
   }),
   safeName = (name = "file") =>
     String(name)
@@ -1163,23 +1163,14 @@ const uploadMaxMb = Math.max(1, Number(process.env.FILE_UPLOAD_MAX_MB) || 10),
   });
 const validateUpload = async (file) => {
   if (!file) return null;
-  const detected = await fileTypeFromBuffer(file.buffer),
-    allowed = new Set([
-      "application/pdf",
-      "application/zip",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "application/msword",
-      "image/png",
-      "image/jpeg",
-      "application/x-cfb",
-    ]);
-  if (!detected || !allowed.has(detected.mime))
+  const detected = await fileTypeFromBuffer(file.buffer);
+  if (!file.buffer?.length)
     throw Object.assign(new Error("Ruxsat etilmagan yoki noma’lum fayl"), {
       status: 400,
     });
   return {
     name: safeName(file.originalname),
-    mime: detected.mime,
+    mime: detected?.mime || file.mimetype || "application/octet-stream",
     size: file.size,
     content: file.buffer,
   };
@@ -1202,7 +1193,7 @@ app.patch("/api/student/profile", requireRole("STUDENT"), async (req, res, next)
     res.json(studentOut(row));
   } catch (e) { next(e); }
 });
-app.post("/api/student/submissions", uploadLimiter, requireRole("STUDENT"), upload.single("file"), async (req, res, next) => {
+app.post("/api/student/submissions", uploadLimiter, requireRole("STUDENT"), upload.array("files"), async (req, res, next) => {
   try {
     const title = String(req.body.title || "").trim(),
       textContent = String(req.body.textContent || "").trim(),
@@ -1212,17 +1203,17 @@ app.post("/api/student/submissions", uploadLimiter, requireRole("STUDENT"), uplo
         figma: validUrl(req.body.figmaUrl),
         external: validUrl(req.body.externalUrl),
       },
-      file = await validateUpload(req.file);
+      files = await Promise.all((req.files || []).map(validateUpload));
     if (title.length < 2)
       return res.status(400).json({ error: "Vazifa nomini kiriting" });
-    if (!textContent && !Object.values(urls).some(Boolean) && !file)
+    if (!textContent && !Object.values(urls).some(Boolean) && !files.length)
       return res.status(400).json({ error: "Kamida matn, link yoki fayl yuboring" });
     const [row] = await sql`insert into submissions(student_id,title,description,category,text_content,github_url,demo_url,figma_url,external_url) values(${req.auth.sub},${title},${String(req.body.description || "").trim()},${String(req.body.category || "Umumiy").trim()},${textContent},${urls.github},${urls.demo},${urls.figma},${urls.external}) returning *`;
-    if (file)
+    for (const file of files)
       await sql`insert into submission_files(submission_id,original_name,mime_type,size_bytes,content) values(${row.id},${file.name},${file.mime},${file.size},${file.content})`;
     await sql`insert into notifications(type,student_id,title,message,due_date,dedupe_key,audience,related_url) values('new_submission',${req.auth.sub},'Yangi vazifa yuborildi',${title},current_date,${`new_submission:${row.id}`},'ADMIN',${`/submissions/${row.id}`})`;
     await createStudentNotification(req.auth.sub, "submission_sent", "Vazifa yuborildi", title, `/student/submissions/${row.id}`, `submission_sent:${row.id}`);
-    res.status(201).json(submissionOut({ ...row, has_file: Boolean(file), file_name: file?.name }));
+    res.status(201).json(submissionOut({ ...row, has_file: files.length > 0, file_name: files[0]?.name }));
   } catch (e) { next(e); }
 });
 app.get("/api/student/submissions", requireRole("STUDENT"), async (req, res, next) => {
@@ -1244,35 +1235,45 @@ app.get("/api/student/submissions/:id", requireRole("STUDENT"), async (req, res,
     const [row] = await sql`select s.*,exists(select 1 from submission_files f where f.submission_id=s.id) has_file,(select original_name from submission_files f where f.submission_id=s.id) file_name from submissions s where id=${req.params.id} and student_id=${req.auth.sub}`;
     if (!row) return res.status(404).json({ error: "Vazifa topilmadi" });
     const revisions = await sql`select id,revision_number,snapshot,feedback,score,submitted_at from submission_revisions where submission_id=${row.id} order by revision_number desc`;
-    res.json({ ...submissionOut(row), revisions });
+    const files = await sql`select id,submission_id,original_name,mime_type,size_bytes from submission_files where submission_id=${row.id} order by created_at`;
+    res.json({ ...submissionOut(row), revisions, files: files.map((file) => ({ id:file.id,name:file.original_name,mimeType:file.mime_type,size:Number(file.size_bytes),url:`/api/student/submissions/${row.id}/files/${file.id}` })) });
   } catch (e) { next(e); }
 });
-app.post("/api/student/submissions/:id/revisions", uploadLimiter, requireRole("STUDENT"), upload.single("file"), async (req, res, next) => {
+app.post("/api/student/submissions/:id/revisions", uploadLimiter, requireRole("STUDENT"), upload.array("files"), async (req, res, next) => {
   try {
     const [current] = await sql`select * from submissions where id=${req.params.id} and student_id=${req.auth.sub}`;
     if (!current) return res.status(404).json({ error: "Vazifa topilmadi" });
     if (current.status !== "REVISION_REQUESTED")
       return res.status(409).json({ error: "Faqat qayta ishlash so‘ralgan vazifa yuboriladi" });
     await sql`insert into submission_revisions(submission_id,revision_number,snapshot,feedback,score) values(${current.id},${current.revision_number},${JSON.stringify(current)}::jsonb,${current.admin_feedback},${current.score}) on conflict do nothing`;
-    const file = await validateUpload(req.file),
+    const files = await Promise.all((req.files || []).map(validateUpload)),
       nextRevision = current.revision_number + 1,
       text = String(req.body.textContent ?? current.text_content).trim(),
       github = validUrl(req.body.githubUrl) || current.github_url,
       demo = validUrl(req.body.demoUrl) || current.demo_url,
       figma = validUrl(req.body.figmaUrl) || current.figma_url,
       external = validUrl(req.body.externalUrl) || current.external_url;
-    if (!text && !github && !demo && !figma && !external && !file)
+    if (!text && !github && !demo && !figma && !external && !files.length)
       return res.status(400).json({ error: "Kamida matn, link yoki fayl yuboring" });
     const [row] = await sql`update submissions set text_content=${text},github_url=${github},demo_url=${demo},figma_url=${figma},external_url=${external},status='SUBMITTED',score=null,admin_feedback='',reviewed_at=null,reviewed_by=null,revision_number=${nextRevision},submitted_at=now(),updated_at=now() where id=${current.id} returning *`;
-    if (file)
-      await sql`insert into submission_files(submission_id,original_name,mime_type,size_bytes,content) values(${row.id},${file.name},${file.mime},${file.size},${file.content}) on conflict(submission_id) do update set original_name=excluded.original_name,mime_type=excluded.mime_type,size_bytes=excluded.size_bytes,content=excluded.content,created_at=now()`;
+    for (const file of files)
+      await sql`insert into submission_files(submission_id,original_name,mime_type,size_bytes,content) values(${row.id},${file.name},${file.mime},${file.size},${file.content})`;
     await sql`insert into notifications(type,student_id,title,message,due_date,dedupe_key,audience,related_url) values('resubmission',${req.auth.sub},'Vazifa qayta yuborildi',${row.title},current_date,${`resubmission:${row.id}:${nextRevision}`},'ADMIN',${`/submissions/${row.id}`})`;
-    res.json(submissionOut({ ...row, has_file: Boolean(file), file_name: file?.name }));
+    res.json(submissionOut({ ...row, has_file: files.length > 0, file_name: files[0]?.name }));
   } catch (e) { next(e); }
 });
 app.get("/api/student/submissions/:id/file", requireRole("STUDENT"), async (req, res, next) => {
   try {
     const [file] = await sql`select f.* from submission_files f join submissions s on s.id=f.submission_id where s.id=${req.params.id} and s.student_id=${req.auth.sub}`;
+    if (!file) return res.status(404).json({ error: "Fayl topilmadi" });
+    res.setHeader("Content-Type", file.mime_type);
+    res.setHeader("Content-Disposition", `attachment; filename="${safeName(file.original_name)}"`);
+    res.send(Buffer.from(file.content));
+  } catch (e) { next(e); }
+});
+app.get("/api/student/submissions/:id/files/:fileId", requireRole("STUDENT"), async (req, res, next) => {
+  try {
+    const [file] = await sql`select f.* from submission_files f join submissions s on s.id=f.submission_id where s.id=${req.params.id} and f.id=${req.params.fileId} and s.student_id=${req.auth.sub}`;
     if (!file) return res.status(404).json({ error: "Fayl topilmadi" });
     res.setHeader("Content-Type", file.mime_type);
     res.setHeader("Content-Disposition", `attachment; filename="${safeName(file.original_name)}"`);
@@ -1320,10 +1321,10 @@ app.post("/api/admin/students/:id/temporary-password", requireRole("ADMIN"), asy
 });
 app.get("/api/admin/submissions", requireRole("ADMIN"), async (req, res, next) => {
   try {
-    const page=Math.max(1,Number(req.query.page)||1),limit=Math.min(50,Math.max(1,Number(req.query.limit)||15)),status=req.query.status||null,student=req.query.student||null,category=req.query.category||null,search=`%${String(req.query.search||'').trim()}%`;
-    const [count]=await sql`select count(*)::int total from submissions x join students s on s.id=x.student_id where (${status}::text is null or x.status=${status}) and (${student}::uuid is null or x.student_id=${student}::uuid) and (${category}::text is null or x.category=${category}) and (x.title ilike ${search} or (s.first_name||' '||s.last_name) ilike ${search})`;
-    const rows=await sql`select x.*,(s.first_name||' '||s.last_name) student_name,exists(select 1 from submission_files f where f.submission_id=x.id) has_file,(select original_name from submission_files f where f.submission_id=x.id) file_name from submissions x join students s on s.id=x.student_id where (${status}::text is null or x.status=${status}) and (${student}::uuid is null or x.student_id=${student}::uuid) and (${category}::text is null or x.category=${category}) and (x.title ilike ${search} or (s.first_name||' '||s.last_name) ilike ${search}) order by case x.status when 'SUBMITTED' then 1 when 'UNDER_REVIEW' then 2 else 3 end,x.submitted_at desc limit ${limit} offset ${(page-1)*limit}`;
-    res.json({items:rows.map(submissionOut),page,total:count.total,pages:Math.ceil(count.total/limit)});
+    const page=Math.max(1,Number(req.query.page)||1),limit=Math.min(50,Math.max(1,Number(req.query.limit)||15)),status=req.query.status||null,student=req.query.student||null,category=req.query.category||null,period=['today','7d','30d'].includes(req.query.period)?req.query.period:'all',search=`%${String(req.query.search||'').trim()}%`;
+    const [summary]=await sql`select count(*)::int total,count(*) filter(where x.status='SUBMITTED')::int submitted,count(*) filter(where x.status='UNDER_REVIEW')::int under_review,count(*) filter(where x.status='REVISION_REQUESTED')::int revision_requested from submissions x join students s on s.id=x.student_id where (${status}::text is null or x.status=${status}) and (${student}::uuid is null or x.student_id=${student}::uuid) and (${category}::text is null or x.category=${category}) and (x.title ilike ${search} or (s.first_name||' '||s.last_name) ilike ${search}) and (${period}='all' or (${period}='today' and (x.submitted_at at time zone 'Asia/Tashkent')::date=(now() at time zone 'Asia/Tashkent')::date) or (${period}='7d' and x.submitted_at>=now()-interval '7 days') or (${period}='30d' and x.submitted_at>=now()-interval '30 days'))`;
+    const rows=await sql`select x.*,(s.first_name||' '||s.last_name) student_name,exists(select 1 from submission_files f where f.submission_id=x.id) has_file,(select original_name from submission_files f where f.submission_id=x.id order by f.created_at limit 1) file_name from submissions x join students s on s.id=x.student_id where (${status}::text is null or x.status=${status}) and (${student}::uuid is null or x.student_id=${student}::uuid) and (${category}::text is null or x.category=${category}) and (x.title ilike ${search} or (s.first_name||' '||s.last_name) ilike ${search}) and (${period}='all' or (${period}='today' and (x.submitted_at at time zone 'Asia/Tashkent')::date=(now() at time zone 'Asia/Tashkent')::date) or (${period}='7d' and x.submitted_at>=now()-interval '7 days') or (${period}='30d' and x.submitted_at>=now()-interval '30 days')) order by x.submitted_at desc limit ${limit} offset ${(page-1)*limit}`;
+    res.json({items:rows.map(submissionOut),page,total:summary.total,pages:Math.ceil(summary.total/limit),counts:{submitted:summary.submitted,underReview:summary.under_review,revisionRequested:summary.revision_requested}});
   } catch(e){next(e);}
 });
 app.get("/api/admin/submissions/:id", requireRole("ADMIN"), async (req,res,next)=>{
@@ -1331,11 +1332,15 @@ app.get("/api/admin/submissions/:id", requireRole("ADMIN"), async (req,res,next)
     const [row]=await sql`select x.*,(s.first_name||' '||s.last_name) student_name,exists(select 1 from submission_files f where f.submission_id=x.id) has_file,(select original_name from submission_files f where f.submission_id=x.id) file_name from submissions x join students s on s.id=x.student_id where x.id=${req.params.id}`;
     if(!row)return res.status(404).json({error:"Vazifa topilmadi"});
     const revisions=await sql`select * from submission_revisions where submission_id=${row.id} order by revision_number desc`;
-    res.json({...submissionOut(row),revisions,fileUrl:row.has_file?`/api/admin/submissions/${row.id}/file`:null});
+    const files=await sql`select id,submission_id,original_name,mime_type,size_bytes from submission_files where submission_id=${row.id} order by created_at`;
+    res.json({...submissionOut(row),revisions,files:files.map((file)=>({id:file.id,name:file.original_name,mimeType:file.mime_type,size:Number(file.size_bytes),url:`/api/admin/submissions/${row.id}/files/${file.id}`})),fileUrl:row.has_file?`/api/admin/submissions/${row.id}/file`:null});
   }catch(e){next(e);}
 });
 app.get("/api/admin/submissions/:id/file", requireRole("ADMIN"), async(req,res,next)=>{
   try{const [file]=await sql`select * from submission_files where submission_id=${req.params.id}`;if(!file)return res.status(404).json({error:"Fayl topilmadi"});res.setHeader("Content-Type",file.mime_type);res.setHeader("Content-Disposition",`attachment; filename="${safeName(file.original_name)}"`);res.send(Buffer.from(file.content));}catch(e){next(e);}
+});
+app.get("/api/admin/submissions/:id/files/:fileId", requireRole("ADMIN"), async(req,res,next)=>{
+  try{const [file]=await sql`select * from submission_files where submission_id=${req.params.id} and id=${req.params.fileId}`;if(!file)return res.status(404).json({error:"Fayl topilmadi"});res.setHeader("Content-Type",file.mime_type);res.setHeader("Content-Disposition",`attachment; filename="${safeName(file.original_name)}"`);res.send(Buffer.from(file.content));}catch(e){next(e);}
 });
 app.patch("/api/admin/submissions/:id/review", requireRole("ADMIN"), async(req,res,next)=>{
   try{
@@ -1384,7 +1389,7 @@ app.use((err, _req, res, _next) => {
   res.status(status).json({
     error:
       err.code === "LIMIT_FILE_SIZE"
-        ? `Fayl ${uploadMaxMb} MB dan oshmasin`
+        ? "Fayl server qabul qiladigan hajmdan oshib ketdi"
         : err.code === "23505"
           ? "Bu ma’lumot avval mavjud"
           : status < 500

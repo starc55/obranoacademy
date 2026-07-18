@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Check,
   MinusCircle,
@@ -16,6 +16,7 @@ import { AppSelect, DatePicker, TimePicker } from "../components/ui/controls";
 import { useApp } from "../context/AppContext";
 import { attendanceService } from "../services/attendanceService";
 import { StatusBadge } from "../components/shared/StatusBadge";
+import { isGroupScheduled, weekdayOf } from "../utils/schedule";
 const statuses = [
   ["entered", "Kirdi", Check],
   ["not_entered", "Kirmadi", MinusCircle],
@@ -35,20 +36,17 @@ export function AttendancePage() {
     individuals = students.filter(
       (s) => s.enrollmentType === "individual" && s.status === "active",
     ),
-    selectedWeekday = new Date(`${date}T00:00:00`).getDay() || 7,
+    selectedWeekday = weekdayOf(date),
+    scheduledGroups = groups.filter((group) => group.active !== false && isGroupScheduled(group, date)),
     scheduledIndividuals = individuals.filter(
       (s) =>
         !s.scheduleDays?.length || s.scheduleDays.includes(selectedWeekday),
     ),
-    list = useMemo(
-      () =>
-        mode === "individual"
+    list = mode === "individual"
           ? scheduledIndividuals
           : students.filter(
               (s) => s.groupId === groupId && s.status === "active",
             ),
-      [students, scheduledIndividuals, mode, groupId],
-    ),
     target = {
       sessionType: mode,
       groupId: mode === "group" ? groupId : null,
@@ -56,9 +54,17 @@ export function AttendancePage() {
       date,
     };
   useEffect(() => {
-    const sessions =
+    if (mode !== "group") return;
+    if (!scheduledGroups.some((group) => group.id === groupId))
+      setGroupId(scheduledGroups[0]?.id || "");
+  }, [date, groupId, mode, scheduledGroups]);
+  useEffect(() => {
+    const currentWeekday = weekdayOf(date),
+      currentIndividuals = students.filter((student) => student.enrollmentType === "individual" && student.status === "active" && (!student.scheduleDays?.length || student.scheduleDays.includes(currentWeekday))),
+      currentTarget = { sessionType: mode, groupId: mode === "group" ? groupId : null, studentId: null, date },
+      sessions =
       mode === "individual"
-        ? scheduledIndividuals
+        ? currentIndividuals
             .map((student) =>
               attendanceService.get({
                 sessionType: "individual",
@@ -67,7 +73,7 @@ export function AttendancePage() {
               }),
             )
             .filter(Boolean)
-        : [attendanceService.get(target)].filter(Boolean);
+        : [attendanceService.get(currentTarget)].filter(Boolean);
     setRecords(
       Object.fromEntries(
         sessions
@@ -77,13 +83,13 @@ export function AttendancePage() {
     );
     setLessonTimes(
       Object.fromEntries(
-        scheduledIndividuals.map((student) => {
+        currentIndividuals.map((student) => {
           const session = sessions.find((row) => row.studentId === student.id);
           return [student.id, session?.lessonTime || student.lessonTime || ""];
         }),
       ),
     );
-  }, [mode, groupId, date, students]);
+  }, [date, groupId, mode, students]);
   useEffect(() => {
     const key = (e) => {
       if (["1", "2", "3", "4", "5"].includes(e.key) && list[focus])
@@ -182,7 +188,8 @@ export function AttendancePage() {
             <label>
               Guruh
               <AppSelect value={groupId} onValueChange={setGroupId}>
-                {groups.map((g) => (
+                {!scheduledGroups.length && <option value="">Bu kuni guruh darsi yo‘q</option>}
+                {scheduledGroups.map((g) => (
                   <option value={g.id} key={g.id}>
                     {g.name}
                   </option>

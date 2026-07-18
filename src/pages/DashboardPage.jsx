@@ -28,6 +28,7 @@ import { useApp } from "../context/AppContext";
 import { paymentsService } from "../services/paymentsService";
 import { analyticsService } from "../services/analyticsService";
 import { request } from "../services/storage";
+import { isAttendanceSessionScheduled } from "../utils/schedule";
 export function DashboardPage() {
   const [insightOverview, setInsightOverview] = useState({
     averageHealth: 0,
@@ -41,7 +42,9 @@ export function DashboardPage() {
   const { students, groups, attendance, payments, settings } = useApp(),
     now = new Date(),
     today = now.toISOString().slice(0, 10),
-    todayRecords = attendance
+    attendanceDB = { attendance, groups, students },
+    scheduledAttendance = attendance.filter((session) => isAttendanceSessionScheduled(session, attendanceDB)),
+    todayRecords = scheduledAttendance
       .filter((a) => a.date === today)
       .flatMap((a) => a.records),
     entered = todayRecords.filter((r) => r.status === "entered").length,
@@ -51,7 +54,7 @@ export function DashboardPage() {
     monthPayments = payments.filter((p) => p.month === month),
     revenue = monthPayments.reduce((a, p) => a + (+p.amount || 0), 0),
     debts = monthPayments.filter((p) => paymentsService.debt(p) > 0).length,
-    allRecords = attendance.flatMap((a) => a.records),
+    allRecords = scheduledAttendance.flatMap((a) => a.records),
     attendanceRate = allRecords.length
       ? Math.round(
           (allRecords.filter(
@@ -89,7 +92,7 @@ export function DashboardPage() {
       const d = new Date();
       d.setDate(d.getDate() - 6 + i);
       const date = d.toISOString().slice(0, 10),
-        rs = attendance
+        rs = scheduledAttendance
           .filter((a) => a.date === date)
           .flatMap((a) => a.records);
       return {
