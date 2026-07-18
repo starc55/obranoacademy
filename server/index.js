@@ -1182,7 +1182,7 @@ app.get("/api/student", requireRole("STUDENT"), async (req, res, next) => {
   try {
     const [student] = await sql`select * from students where id=${req.auth.sub}`;
     const [stats] = await sql`select count(*)::int total,count(*) filter(where status='UNDER_REVIEW')::int under_review,count(*) filter(where status='APPROVED')::int approved,count(*) filter(where status='REVISION_REQUESTED')::int revision_requested,round(avg(score) filter(where score is not null),1) average_score from submissions where student_id=${req.auth.sub}`;
-    const recent = await sql`select s.*,exists(select 1 from submission_files f where f.submission_id=s.id) has_file,(select original_name from submission_files f where f.submission_id=s.id) file_name from submissions s where student_id=${req.auth.sub} order by submitted_at desc limit 5`;
+    const recent = await sql`select s.*,exists(select 1 from submission_files f where f.submission_id=s.id) has_file,(select original_name from submission_files f where f.submission_id=s.id order by f.created_at limit 1) file_name from submissions s where student_id=${req.auth.sub} order by submitted_at desc limit 5`;
     const achievements = await sql`select * from achievements where student_id=${req.auth.sub} order by created_at desc`;
     res.json({ profile: studentOut(student), stats: { ...stats, average_score: Number(stats.average_score || 0) }, recent: recent.map(submissionOut), achievements });
   } catch (e) { next(e); }
@@ -1226,13 +1226,13 @@ app.get("/api/student/submissions", requireRole("STUDENT"), async (req, res, nex
       from = req.query.from || null,
       to = req.query.to || null;
     const [count] = await sql`select count(*)::int total from submissions where student_id=${req.auth.sub} and (${status}::text is null or status=${status}) and (${category}::text is null or category=${category}) and (title ilike ${search} or description ilike ${search}) and (${from}::date is null or submitted_at::date>=${from}::date) and (${to}::date is null or submitted_at::date<=${to}::date)`;
-    const rows = await sql`select s.*,exists(select 1 from submission_files f where f.submission_id=s.id) has_file,(select original_name from submission_files f where f.submission_id=s.id) file_name from submissions s where student_id=${req.auth.sub} and (${status}::text is null or status=${status}) and (${category}::text is null or category=${category}) and (title ilike ${search} or description ilike ${search}) and (${from}::date is null or submitted_at::date>=${from}::date) and (${to}::date is null or submitted_at::date<=${to}::date) order by submitted_at desc limit ${limit} offset ${(page - 1) * limit}`;
+    const rows = await sql`select s.*,exists(select 1 from submission_files f where f.submission_id=s.id) has_file,(select original_name from submission_files f where f.submission_id=s.id order by f.created_at limit 1) file_name from submissions s where student_id=${req.auth.sub} and (${status}::text is null or status=${status}) and (${category}::text is null or category=${category}) and (title ilike ${search} or description ilike ${search}) and (${from}::date is null or submitted_at::date>=${from}::date) and (${to}::date is null or submitted_at::date<=${to}::date) order by submitted_at desc limit ${limit} offset ${(page - 1) * limit}`;
     res.json({ items: rows.map(submissionOut), page, total: count.total, pages: Math.ceil(count.total / limit) });
   } catch (e) { next(e); }
 });
 app.get("/api/student/submissions/:id", requireRole("STUDENT"), async (req, res, next) => {
   try {
-    const [row] = await sql`select s.*,exists(select 1 from submission_files f where f.submission_id=s.id) has_file,(select original_name from submission_files f where f.submission_id=s.id) file_name from submissions s where id=${req.params.id} and student_id=${req.auth.sub}`;
+    const [row] = await sql`select s.*,exists(select 1 from submission_files f where f.submission_id=s.id) has_file,(select original_name from submission_files f where f.submission_id=s.id order by f.created_at limit 1) file_name from submissions s where id=${req.params.id} and student_id=${req.auth.sub}`;
     if (!row) return res.status(404).json({ error: "Vazifa topilmadi" });
     const revisions = await sql`select id,revision_number,snapshot,feedback,score,submitted_at from submission_revisions where submission_id=${row.id} order by revision_number desc`;
     const files = await sql`select id,submission_id,original_name,mime_type,size_bytes from submission_files where submission_id=${row.id} order by created_at`;
@@ -1329,7 +1329,7 @@ app.get("/api/admin/submissions", requireRole("ADMIN"), async (req, res, next) =
 });
 app.get("/api/admin/submissions/:id", requireRole("ADMIN"), async (req,res,next)=>{
   try{
-    const [row]=await sql`select x.*,(s.first_name||' '||s.last_name) student_name,exists(select 1 from submission_files f where f.submission_id=x.id) has_file,(select original_name from submission_files f where f.submission_id=x.id) file_name from submissions x join students s on s.id=x.student_id where x.id=${req.params.id}`;
+    const [row]=await sql`select x.*,(s.first_name||' '||s.last_name) student_name,exists(select 1 from submission_files f where f.submission_id=x.id) has_file,(select original_name from submission_files f where f.submission_id=x.id order by f.created_at limit 1) file_name from submissions x join students s on s.id=x.student_id where x.id=${req.params.id}`;
     if(!row)return res.status(404).json({error:"Vazifa topilmadi"});
     const revisions=await sql`select * from submission_revisions where submission_id=${row.id} order by revision_number desc`;
     const files=await sql`select id,submission_id,original_name,mime_type,size_bytes from submission_files where submission_id=${row.id} order by created_at`;
