@@ -9,7 +9,7 @@ const page = (name) =>
     import(`./pages/${name}.jsx`).then((module) => ({ default: module[name] })),
   );
 const Login = page("LoginPage"),
-  Register = page("RegisterPage"),
+  Activation = page("ActivationPage"),
   Dashboard = page("DashboardPage"),
   Students = page("StudentsPage"),
   StudentDetails = page("StudentDetailsPage"),
@@ -24,7 +24,6 @@ const Login = page("LoginPage"),
   Settings = page("SettingsPage"),
   AdminSubmissions = page("AdminSubmissionsPage"),
   StudentDashboard = page("StudentDashboardPage"),
-  StudentSubmit = page("StudentSubmitPage"),
   StudentSubmissions = page("StudentSubmissionsPage"),
   StudentSubmissionDetail = page("StudentSubmissionDetailPage"),
   StudentNotifications = page("StudentNotificationsPage");
@@ -43,7 +42,6 @@ function ProtectedApp({ authenticated, role }) {
   if (role === "STUDENT")
     return <StudentLayout><Suspense fallback={<RouteLoader/>}><Routes>
       <Route path="/student" element={<StudentDashboard/>}/>
-      <Route path="/student/submit" element={<StudentSubmit/>}/>
       <Route path="/student/submissions" element={<StudentSubmissions/>}/>
       <Route path="/student/submissions/:id" element={<StudentSubmissionDetail/>}/>
       <Route path="/student/notifications" element={<StudentNotifications/>}/>
@@ -94,8 +92,8 @@ export function App() {
         }
       />
       <Route
-        path="/register"
-        element={authenticated ? <Navigate to={role === "STUDENT" ? "/student" : "/"} replace /> : <Suspense fallback={<RouteLoader/>}><Register/></Suspense>}
+        path="/activate"
+        element={authenticated ? <Navigate to={role === "STUDENT" ? "/student" : "/"} replace /> : <Suspense fallback={<RouteLoader/>}><Activation/></Suspense>}
       />
       <Route
         path="/*"

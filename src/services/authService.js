@@ -27,8 +27,8 @@ export const authService = {
       return false;
     }
   },
-  async register(payload) {
-    return request("/api/auth/register", {
+  async activate(payload) {
+    return request("/api/auth/activate", {
       method: "POST",
       body: JSON.stringify(payload),
     });

@@ -67,11 +67,12 @@ export function LoginPage() {
             <p>Davom etish uchun hisob ma’lumotlarini kiriting.</p>
           </header>
           <label>
-            Email manzil
+            Nickname
             <div className="input-shell">
               <Mail />
               <input
-                type="email"
+                type="text"
+                placeholder="Nickname yoki admin email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -108,7 +109,7 @@ export function LoginPage() {
               </>
             )}
           </button>
-          <p className="auth-switch">O‘quvchi hisobingiz yo‘qmi? <Link to="/register">Ro‘yxatdan o‘tish</Link></p>
+          <p className="auth-switch">Admin hisob yaratganmi? <Link to="/activate">Hisobni faollashtirish</Link></p>
         </form>
       </section>
     </main>

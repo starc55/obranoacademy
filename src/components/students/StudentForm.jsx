@@ -12,7 +12,9 @@ const schema = z
   .object({
     firstName: z.string().min(2, "Ismni kiriting"),
     lastName: z.string().min(2, "Familiyani kiriting"),
-    phone: z.string().min(9, "Telefon noto‘g‘ri"),
+    nickname: z.string().min(3, "Nickname kamida 3 belgi").max(32),
+    temporaryPassword: z.string().optional(),
+    phone: z.string().refine((value) => !value || value.length >= 9, "Telefon noto‘g‘ri"),
     enrollmentType: z.enum(["group", "individual"]),
     groupId: z.string().nullish(),
     scheduleDays: z.array(z.number()).optional(),
@@ -23,12 +25,6 @@ const schema = z
   })
   .passthrough()
   .superRefine((v, ctx) => {
-    if (v.enrollmentType === "group" && !v.groupId)
-      ctx.addIssue({
-        code: "custom",
-        path: ["groupId"],
-        message: "Guruhni tanlang",
-      });
     if (v.enrollmentType === "individual" && v.scheduleDays?.length !== 3)
       ctx.addIssue({
         code: "custom",
@@ -97,7 +93,24 @@ export function StudentForm({ open, onClose, student }) {
     );
   }, [student, open, reset, settings.defaultGroupFee]);
   const type = watch("enrollmentType") || "group",
-    paymentStatus = watch("initialPaymentStatus") || "unpaid";
+    paymentStatus = watch("initialPaymentStatus") || "unpaid",
+    temporaryPassword = watch("temporaryPassword") || "",
+    nickname = watch("nickname") || "";
+  const generateTemporaryPassword = () => {
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#";
+    const bytes = new Uint32Array(12);
+    crypto.getRandomValues(bytes);
+    const value = Array.from(bytes, (number) => alphabet[number % alphabet.length]).join("");
+    setValue("temporaryPassword", value, { shouldDirty: true, shouldValidate: true });
+  };
+  const copyCredentials = async () => {
+    if (!nickname.trim() || !temporaryPassword) {
+      toast.error("Avval nickname kiriting va vaqtinchalik kod yarating");
+      return;
+    }
+    await navigator.clipboard?.writeText(`Nickname: ${nickname.trim()}\nVaqtinchalik parol: ${temporaryPassword}`);
+    toast.success("Nickname va vaqtinchalik parol nusxalandi");
+  };
   const setFee = (fee) => {
     setValue("monthlyFee", fee, { shouldDirty: true });
     if (paymentStatus === "paid")
@@ -145,6 +158,13 @@ export function StudentForm({ open, onClose, student }) {
     try {
       if (student) {
         await studentsService.updateAndRefresh(student.id, payload);
+        if (v.temporaryPassword) {
+          await navigator.clipboard?.writeText(`Nickname: ${v.nickname}\nVaqtinchalik parol: ${v.temporaryPassword}`);
+          toast.success(`Nickname: ${v.nickname} · Kod: ${v.temporaryPassword}`, {
+            duration: 12000,
+            description: "Login ma’lumotlari nusxalandi. Eski kod bekor qilindi.",
+          });
+        }
         if (v.initialPaymentStatus === "paid") {
           await paymentsService.saveMonthly({
             studentId: student.id,
@@ -159,16 +179,22 @@ export function StudentForm({ open, onClose, student }) {
             note: "O‘quvchini tahrirlashda qabul qilindi",
           });
           toast.success("O‘quvchi va to‘lov yangilandi");
-        } else toast.success("O‘quvchi yangilandi");
+        } else if (!v.temporaryPassword) toast.success("O‘quvchi yangilandi");
       } else {
-        await studentsService.createWithPayment(payload, {
+        const result = await studentsService.createWithPayment(payload, {
           status: v.initialPaymentStatus,
           amount: Number(v.initialPaymentAmount || 0),
           month: v.initialPaymentMonth || new Date().toISOString().slice(0, 7),
           date: v.initialPaymentDate,
           method: v.initialPaymentMethod,
         });
-        toast.success(
+        if (result.temporaryPassword) {
+          await navigator.clipboard?.writeText(result.temporaryPassword);
+          toast.success(`Vaqtinchalik parol: ${result.temporaryPassword}`, {
+            duration: 12000,
+            description: "Parol clipboardga nusxalandi. Studentga xavfsiz yuboring.",
+          });
+        } else toast.success(
           v.initialPaymentStatus === "paid"
             ? "O‘quvchi va to‘lov qo‘shildi"
             : "O‘quvchi qo‘shildi",
@@ -276,6 +302,33 @@ export function StudentForm({ open, onClose, student }) {
           <input {...register("lastName")} />
           <small>{errors.lastName?.message}</small>
         </label>
+        <label className="nickname-field">
+          Nickname
+          <input {...register("nickname")} placeholder="student.nickname" />
+          <small>{errors.nickname?.message}</small>
+        </label>
+        {(
+          <label className="credential-field">
+            {student ? "Bir martalik faollashtirish kodi" : "Vaqtinchalik parol"}
+            <input
+              {...register("temporaryPassword")}
+              placeholder={
+                student
+                  ? "Bo‘sh qolsa hozirgi kod o‘zgarmaydi"
+                  : "Bo‘sh qolsa avtomatik yaratiladi"
+              }
+            />
+            <div className="credential-actions">
+              <button type="button" className="btn" onClick={generateTemporaryPassword}>
+                Kod yaratish
+              </button>
+              <button type="button" className="btn" onClick={copyCredentials} disabled={!temporaryPassword}>
+                Nickname + kodni nusxalash
+              </button>
+            </div>
+            {student && <small>Kiritilsa eski vaqtinchalik kod bekor bo‘ladi</small>}
+          </label>
+        )}
         <label>
           Telefon
           <input {...register("phone")} placeholder="+998 90 123 45 67" />

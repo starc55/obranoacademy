@@ -1,11 +1,11 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Send, ListChecks, Bell, LogOut } from "lucide-react";
+import { LayoutDashboard, ListChecks, Bell, LogOut } from "lucide-react";
 import { authService } from "../../services/authService";
 import logo from "../../assets/logo.png";
+import { StudentNotificationCenter } from "./StudentNotificationCenter";
 
 const nav = [
   ["/student", "Bosh sahifa", LayoutDashboard],
-  ["/student/submit", "Vazifa yuborish", Send],
   ["/student/submissions", "Mening vazifalarim", ListChecks],
   ["/student/notifications", "Bildirishnomalar", Bell],
 ];
@@ -26,7 +26,7 @@ export function StudentLayout({ children }) {
           <button className="icon-btn" onClick={()=>{authService.logout();navigate("/login");}}><LogOut/></button>
         </div>
       </aside>
-      <main className="content"><div className="content-inner">{children}</div></main>
+      <main className="content"><header className="topbar student-topbar"><div><strong>Student kabineti</strong><small>{user?.fullName}</small></div><StudentNotificationCenter/></header><div className="content-inner">{children}</div></main>
     </div>
   );
 }

@@ -23,7 +23,7 @@ import { StudentForm } from "../components/students/StudentForm";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { ImportModal } from "../components/students/ImportModal";
 import { importExportService } from "../services/importExportService";
-import { hydrateDB, request } from "../services/storage";
+import { request } from "../services/storage";
 const matchesMastery = (score, mastery) => {
   if (mastery === "all") return true;
   if (mastery === "no_data") return score == null;
@@ -76,7 +76,7 @@ export function StudentsPage() {
               (group === "individual"
                 ? s.enrollmentType === "individual"
                 : s.groupId === group)) &&
-            (status === "all" || s.status === status) &&
+            (status === "all" || (s.accountStatus || "NOT_ACTIVATED") === status) &&
             matchesMastery(insightScores[s.id], mastery)
         ),
       [students, q, group, status, mastery, insightScores]
@@ -92,15 +92,6 @@ export function StudentsPage() {
       setSelected([]);
       toast.success("O‘quvchi o‘chirildi");
     }
-  };
-  const toggleStudentStatus = async (student) => {
-    const next = student.status === "active" ? "suspended" : "active";
-    await request(`/api/admin/students/${student.id}/status`, {
-      method: "PATCH",
-      body: JSON.stringify({ status: next }),
-    });
-    await hydrateDB();
-    toast.success(next === "active" ? "O‘quvchi faollashtirildi" : "O‘quvchi to‘xtatildi");
   };
   const copy = async () => {
     const data = students
@@ -175,9 +166,9 @@ export function StudentsPage() {
             }}
           >
             <option value="all">Barcha holatlar</option>
-            <option value="active">Faol</option>
-            <option value="inactive">Noaktiv</option>
-            <option value="suspended">To‘xtatilgan</option>
+            <option value="NOT_ACTIVATED">Faollashtirilmagan</option>
+            <option value="ACTIVE">Faol</option>
+            <option value="BLOCKED">Bloklangan</option>
           </AppSelect>
           <AppSelect
             value={mastery}
@@ -258,7 +249,8 @@ export function StudentsPage() {
                       </div>
                       <div>
                         <strong>{s.fullName}</strong>
-                        <small>{s.note || "Izoh yo‘q"}</small>
+                        <small>{s.nickname ? `@${s.nickname}` : "Nickname belgilanmagan"}</small>
+                        <StatusBadge status={s.accountStatus || "NOT_ACTIVATED"} />
                       </div>
                     </div>
                   </td>
@@ -319,7 +311,7 @@ export function StudentsPage() {
                     />
                   </td>
                   <td>
-                    <StatusBadge status={s.status} />
+                    <StatusBadge status={s.accountStatus || "NOT_ACTIVATED"} />
                   </td>
                   <td>
                     <div className="row-actions">
@@ -330,8 +322,8 @@ export function StudentsPage() {
                         <Trash2 />
                       </button>
                       <button
-                        title={s.status === "active" ? "Faoliyatini to‘xtatish" : "Faollashtirish"}
-                        onClick={() => toggleStudentStatus(s)}
+                        title="Nickname va faollashtirish kodini tayyorlash"
+                        onClick={() => setEdit(s)}
                       >
                         <MoreHorizontal />
                       </button>

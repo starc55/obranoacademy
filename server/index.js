@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import rateLimit from "express-rate-limit";
@@ -28,7 +28,15 @@ await sql`alter table students add column if not exists telegram_username text`;
 await sql`alter table students add column if not exists github_username text`;
 await sql`alter table students add column if not exists direction text`;
 await sql`alter table students add column if not exists last_active_at timestamptz`;
+await sql`alter table students add column if not exists nickname text`;
+await sql`alter table students add column if not exists temporary_password_hash text`;
+await sql`alter table students add column if not exists account_status text not null default 'NOT_ACTIVATED'`;
+await sql`alter table students add column if not exists activated_at timestamptz`;
+await sql`alter table students drop constraint if exists students_group_required_check`;
+await sql`alter table students drop constraint if exists students_phone_key`;
+await sql`create unique index if not exists students_phone_nonempty_unique on students(phone) where phone<>''`;
 await sql`create unique index if not exists students_email_unique on students(lower(email)) where email is not null`;
+await sql`create unique index if not exists students_nickname_unique on students(lower(nickname)) where nickname is not null`;
 await sql`create table if not exists submissions(id uuid primary key default gen_random_uuid(),student_id uuid not null references students(id) on delete cascade,title text not null,description text not null default '',category text not null default 'Umumiy',text_content text not null default '',github_url text,demo_url text,figma_url text,external_url text,status text not null default 'SUBMITTED',score smallint,admin_feedback text not null default '',reviewed_by text,reviewed_at timestamptz,revision_number integer not null default 1,submitted_at timestamptz not null default now(),created_at timestamptz not null default now(),updated_at timestamptz not null default now(),check(status in ('SUBMITTED','UNDER_REVIEW','REVISION_REQUESTED','APPROVED','REJECTED')),check(score is null or score between 0 and 100))`;
 await sql`create index if not exists submissions_student_idx on submissions(student_id,submitted_at desc)`;
 await sql`create index if not exists submissions_status_idx on submissions(status,submitted_at desc)`;
@@ -102,9 +110,14 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Juda ko‘p urinish. Keyinroq qayta urinib ko‘ring" },
 });
-app.use(["/api/auth/login", "/api/auth/register"], authLimiter);
+app.use(["/api/auth/login", "/api/auth/activate"], authLimiter);
 app.use("/api", (req, res, next) => {
-  if (["/health", "/auth/login", "/auth/register"].includes(req.path))
+  const mountedPath = req.path.replace(/\/+$/, "") || "/",
+    originalPath = req.originalUrl.split("?")[0].replace(/\/+$/, "") || "/";
+  if (
+    ["/health", "/auth/login", "/auth/activate"].includes(mountedPath) ||
+    ["/api/health", "/api/auth/login", "/api/auth/activate"].includes(originalPath)
+  )
     return next();
   if (
     ["/cron/weekly", "/cron/reminders"].includes(req.path) &&
@@ -129,60 +142,54 @@ const requireRole = (role) => (req, res, next) =>
   req.auth?.role === role
     ? next()
     : res.status(403).json({ error: "Bu amal uchun ruxsat yo‘q" });
-app.post("/api/auth/register", async (req, res, next) => {
+app.post("/api/auth/activate", async (req, res, next) => {
   try {
-    const firstName = String(req.body.firstName || "").trim(),
-      lastName = String(req.body.lastName || "").trim(),
-      email = String(req.body.email || "").trim().toLowerCase(),
-      phone = String(req.body.phone || "").trim(),
+    const nickname = String(req.body.nickname || "").trim().toLowerCase(),
+      temporaryPassword = String(req.body.temporaryPassword || ""),
       password = String(req.body.password || "");
-    if (
-      firstName.length < 2 ||
-      lastName.length < 2 ||
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
-      !/^\+?[0-9 ()-]{9,20}$/.test(phone)
-    )
-      return res.status(400).json({ error: "Registratsiya ma’lumotlarini tekshiring" });
+    if (!nickname || !temporaryPassword)
+      return res.status(400).json({ error: "Nickname va vaqtinchalik parolni kiriting" });
     if (password.length < 8)
-      return res.status(400).json({ error: "Parol kamida 8 belgidan iborat bo‘lsin" });
+      return res.status(400).json({ error: "Yangi parol kamida 8 belgidan iborat bo‘lsin" });
     if (password !== String(req.body.confirmPassword || ""))
-      return res.status(400).json({ error: "Parollar bir xil emas" });
-    const hash = await bcrypt.hash(password, 12);
-    const [student] = await sql`insert into students(first_name,last_name,email,phone,password_hash,telegram_username,github_username,direction,enrollment_type,status,joined_date) values(${firstName},${lastName},${email},${phone},${hash},${String(req.body.telegramUsername || "").trim() || null},${String(req.body.githubUsername || "").trim() || null},${String(req.body.direction || "").trim() || null},'individual','active',current_date) returning *`;
-    await sql`insert into notifications(type,student_id,title,message,due_date,dedupe_key,audience,related_url) values('student_registered',${student.id},'Yangi o‘quvchi ro‘yxatdan o‘tdi',${`${firstName} ${lastName} · ${email}`},current_date,${`student_registered:${student.id}`},'ADMIN',${`/students/${student.id}`})`;
-    res.status(201).json({ message: "Registratsiya muvaffaqiyatli" });
-  } catch (e) {
-    if (e.code === "23505")
-      return res.status(409).json({ error: "Bu email avval ro‘yxatdan o‘tgan" });
-    next(e);
-  }
+      return res.status(400).json({ error: "Yangi parollar bir xil emas" });
+    const [student] = await sql`select * from students where lower(nickname)=${nickname} limit 1`;
+    if (!student) return res.status(404).json({ error: "Student hisobi topilmadi" });
+    if (student.account_status !== "NOT_ACTIVATED")
+      return res.status(409).json({ error: "Bu hisob avval faollashtirilgan" });
+    if (!student.temporary_password_hash || !(await bcrypt.compare(temporaryPassword, student.temporary_password_hash)))
+      return res.status(401).json({ error: "Vaqtinchalik parol noto‘g‘ri" });
+    const passwordHash = await bcrypt.hash(password, 12);
+    await sql`update students set password_hash=${passwordHash},temporary_password_hash=null,account_status='ACTIVE',activated_at=now(),updated_at=now() where id=${student.id}`;
+    res.json({ message: "Hisob muvaffaqiyatli faollashtirildi" });
+  } catch (e) { next(e); }
 });
 app.post("/api/auth/login", async (req, res, next) => {
  try {
-  const email = String(req.body.email || "")
+  const login = String(req.body.nickname || req.body.email || "")
     .trim()
     .toLowerCase();
   const password = String(req.body.password || "");
-  const emailOk = email === process.env.ADMIN_EMAIL.trim().toLowerCase();
+  const emailOk = login === process.env.ADMIN_EMAIL.trim().toLowerCase();
   const passwordBuffer = Buffer.from(password);
   const expectedBuffer = Buffer.from(process.env.ADMIN_PASSWORD);
   const passwordOk =
     passwordBuffer.length === expectedBuffer.length &&
     timingSafeEqual(passwordBuffer, expectedBuffer);
   if (emailOk && passwordOk) {
-    const user = { id: "admin", email, role: "ADMIN", fullName: "Administrator" };
+    const user = { id: "admin", email: login, role: "ADMIN", fullName: "Administrator" };
     return res.json({
-      token: signToken({ sub: email, role: "ADMIN", exp: Date.now() + 12 * 60 * 60 * 1000 }),
+      token: signToken({ sub: login, role: "ADMIN", exp: Date.now() + 12 * 60 * 60 * 1000 }),
       user,
     });
   }
-  const [student] = await sql`select * from students where lower(email)=${email} limit 1`;
+  const [student] = await sql`select * from students where lower(nickname)=${login} limit 1`;
   if (!student?.password_hash || !(await bcrypt.compare(password, student.password_hash)))
     return res.status(401).json({ error: "Login yoki parol noto‘g‘ri" });
-  if (student.status !== "active")
-    return res.status(403).json({ error: "Student hisobi faol emas" });
+  if (student.account_status !== "ACTIVE")
+    return res.status(403).json({ error: "Hisob faollashtirilmagan yoki bloklangan" });
   await sql`update students set last_active_at=now() where id=${student.id}`;
-  const user = { id: student.id, email, role: "STUDENT", fullName: `${student.first_name} ${student.last_name}` };
+  const user = { id: student.id, nickname: student.nickname, role: "STUDENT", fullName: `${student.first_name} ${student.last_name}` };
   res.json({
     token: signToken({ sub: student.id, role: "STUDENT", exp: Date.now() + 12 * 60 * 60 * 1000 }),
     user,
@@ -203,6 +210,7 @@ const studentOut = (r) => ({
   lastName: r.last_name,
   fullName: `${r.first_name} ${r.last_name}`,
   email: r.email || null,
+  nickname: r.nickname || null,
   phone: r.phone,
   parentPhone: r.parent_phone,
   groupId: r.group_id,
@@ -219,6 +227,8 @@ const studentOut = (r) => ({
   githubUsername: r.github_username || null,
   direction: r.direction || null,
   lastActivity: r.last_active_at || null,
+  accountStatus: r.account_status || "NOT_ACTIVATED",
+  activatedAt: r.activated_at || null,
   createdAt: r.created_at || null,
 });
 const groupOut = (r) => ({
@@ -289,11 +299,16 @@ app.get("/api/data", async (_req, res, next) => {
 });
 app.post("/api/students", async (req, res, next) => {
   try {
-    const s = req.body;
+    const s = req.body,
+      nickname = String(s.nickname || "").trim().toLowerCase(),
+      temporaryPassword = String(s.temporaryPassword || "").trim() || randomBytes(9).toString("base64url"),
+      temporaryPasswordHash = await bcrypt.hash(temporaryPassword, 12);
+    if (!/^[a-z0-9._-]{3,32}$/.test(nickname))
+      return res.status(400).json({ error: "Nickname 3–32 belgi: harf, raqam, nuqta, _ yoki -" });
     const [row] =
-      await sql`insert into students(id,first_name,last_name,phone,parent_phone,group_id,enrollment_type,schedule_days,lesson_time,monthly_fee,joined_date,birth_date,note,avatar_url,status) values(${
+      await sql`insert into students(id,first_name,last_name,nickname,temporary_password_hash,account_status,phone,parent_phone,group_id,enrollment_type,schedule_days,lesson_time,monthly_fee,joined_date,birth_date,note,avatar_url,status) values(${
         s.id
-      },${s.firstName},${s.lastName},${s.phone},${s.parentPhone || ""},${
+      },${s.firstName},${s.lastName},${nickname},${temporaryPasswordHash},'NOT_ACTIVATED',${s.phone || ""},${s.parentPhone || ""},${
         s.groupId || null
       },${s.enrollmentType || "group"},${s.scheduleDays || []},${s.lessonTime || null},${
         s.monthlyFee || 0
@@ -321,19 +336,29 @@ app.post("/api/students", async (req, res, next) => {
         throw paymentError;
       }
     }
-    res.status(201).json({ student: studentOut(row), payment });
+    res.status(201).json({ student: studentOut(row), payment, temporaryPassword });
   } catch (e) {
     next(e);
   }
 });
 app.patch("/api/students/:id", async (req, res, next) => {
   try {
-    const s = req.body;
+    const s = req.body,
+      newTemporaryPassword = String(s.temporaryPassword || "").trim(),
+      newTemporaryPasswordHash = newTemporaryPassword
+        ? await bcrypt.hash(newTemporaryPassword, 12)
+        : null;
+    if (newTemporaryPassword) {
+      const [account] = await sql`select account_status from students where id=${req.params.id}`;
+      if (!account) return res.status(404).json({ error: "Student topilmadi" });
+      if (account.account_status !== "NOT_ACTIVATED")
+        return res.status(409).json({ error: "Faollashtirilgan hisobga vaqtinchalik parol berilmaydi" });
+    }
     const [row] = await sql`update students set first_name=coalesce(${
       s.firstName || null
-    },first_name),last_name=coalesce(${
+    },first_name),temporary_password_hash=coalesce(${newTemporaryPasswordHash},temporary_password_hash),last_name=coalesce(${
       s.lastName || null
-    },last_name),phone=coalesce(${
+    },last_name),nickname=coalesce(${String(s.nickname || "").trim().toLowerCase() || null},nickname),phone=coalesce(${
       s.phone || null
     },phone),parent_phone=coalesce(${
       s.parentPhone ?? null
@@ -1075,6 +1100,8 @@ app.post("/api/alerts/generate", async (_req, res, next) => {
 app.patch("/api/alerts/:id", async (req, res, next) => {
   try {
     const status = String(req.body.status || "").toUpperCase();
+    if (status === 'ACTIVE')
+      return res.status(400).json({ error:"Hisobni faqat o‘quvchining o‘zi faollashtiradi" });
     if (!["OPEN", "ACKNOWLEDGED", "RESOLVED", "DISMISSED"].includes(status))
       return res.status(400).json({ error: "Alert status noto‘g‘ri" });
     const [row] =
@@ -1267,16 +1294,28 @@ app.patch("/api/student/notifications/read-all", requireRole("STUDENT"), async (
 
 app.get("/api/admin/students", requireRole("ADMIN"), async (req, res, next) => {
   try {
-    const rows = await sql`select s.id,s.first_name,s.last_name,s.email,s.phone,s.created_at,s.status,s.last_active_at,count(x.id)::int total_submissions,count(x.id) filter(where x.status='UNDER_REVIEW')::int under_review,count(x.id) filter(where x.status='APPROVED')::int approved,round(avg(x.score) filter(where x.score is not null),1) average_score from students s left join submissions x on x.student_id=s.id group by s.id order by s.created_at desc`;
-    res.json(rows.map((r) => ({ id:r.id,fullName:`${r.first_name} ${r.last_name}`,email:r.email,phone:r.phone,registeredAt:r.created_at,status:r.status,lastActivity:r.last_active_at,totalSubmissions:r.total_submissions,underReview:r.under_review,approved:r.approved,averageScore:Number(r.average_score || 0) })));
+    const rows = await sql`select s.id,s.first_name,s.last_name,s.nickname,s.email,s.phone,s.created_at,s.status,s.account_status,s.activated_at,s.last_active_at,count(x.id)::int total_submissions,count(x.id) filter(where x.status='UNDER_REVIEW')::int under_review,count(x.id) filter(where x.status='APPROVED')::int approved,round(avg(x.score) filter(where x.score is not null),1) average_score from students s left join submissions x on x.student_id=s.id group by s.id order by s.created_at desc`;
+    res.json(rows.map((r) => ({ id:r.id,fullName:`${r.first_name} ${r.last_name}`,nickname:r.nickname,email:r.email,phone:r.phone,registeredAt:r.created_at,status:r.status,accountStatus:r.account_status,activatedAt:r.activated_at,lastActivity:r.last_active_at,totalSubmissions:r.total_submissions,underReview:r.under_review,approved:r.approved,averageScore:Number(r.average_score || 0) })));
   } catch (e) { next(e); }
 });
 app.patch("/api/admin/students/:id/status", requireRole("ADMIN"), async (req, res, next) => {
   try {
-    const status = String(req.body.status || "").toLowerCase();
-    if (!['active','suspended'].includes(status)) return res.status(400).json({ error:"Status noto‘g‘ri" });
-    const [row] = await sql`update students set status=${status},updated_at=now() where id=${req.params.id} returning id,status`;
+    const status = String(req.body.status || "").toUpperCase();
+    if (!['ACTIVE','BLOCKED'].includes(status)) return res.status(400).json({ error:"Status noto‘g‘ri" });
+    const [row] = await sql`update students set account_status=${status},updated_at=now() where id=${req.params.id} returning id,account_status`;
     res.json(row);
+  } catch (e) { next(e); }
+});
+app.post("/api/admin/students/:id/temporary-password", requireRole("ADMIN"), async (req, res, next) => {
+  try {
+    const [student] = await sql`select account_status from students where id=${req.params.id}`;
+    if (!student) return res.status(404).json({ error: "Student topilmadi" });
+    if (student.account_status !== 'NOT_ACTIVATED')
+      return res.status(409).json({ error: "Faqat faollashtirilmagan hisob paroli yangilanadi" });
+    const temporaryPassword = randomBytes(9).toString("base64url"),
+      hash = await bcrypt.hash(temporaryPassword, 12);
+    await sql`update students set temporary_password_hash=${hash},updated_at=now() where id=${req.params.id}`;
+    res.json({ temporaryPassword });
   } catch (e) { next(e); }
 });
 app.get("/api/admin/submissions", requireRole("ADMIN"), async (req, res, next) => {
