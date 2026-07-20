@@ -3,8 +3,21 @@ import { request } from "./storage";
 const SESSION_KEY = "nova_admin_session";
 const USER_KEY = "nova_auth_user";
 
+const hasValidSession = () => {
+  const token = localStorage.getItem(SESSION_KEY);
+  if (!token) return false;
+  try {
+    const encoded = token.split(".")[0].replace(/-/g, "+").replace(/_/g, "/"),
+      base64 = encoded.padEnd(Math.ceil(encoded.length / 4) * 4, "="),
+      payload = JSON.parse(atob(base64));
+    return Number(payload.exp) > Date.now();
+  } catch {
+    return false;
+  }
+};
+
 export const authService = {
-  isAuthenticated: () => Boolean(localStorage.getItem(SESSION_KEY)),
+  isAuthenticated: hasValidSession,
   getUser: () => {
     try {
       return JSON.parse(localStorage.getItem(USER_KEY)) || null;

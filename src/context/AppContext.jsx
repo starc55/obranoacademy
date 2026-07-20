@@ -10,7 +10,8 @@ export function AppProvider({ children }) {
       catch { return true; }
     };
     const hydrateAfterLogin = () => {
-      if (isAdmin()) hydrateDB().catch(() => {});
+      if (localStorage.getItem("nova_admin_session") && isAdmin())
+        hydrateDB().catch(() => {});
     };
     if (localStorage.getItem("nova_admin_session") && isAdmin()) hydrateAfterLogin();
     window.addEventListener("nova:data", refresh);

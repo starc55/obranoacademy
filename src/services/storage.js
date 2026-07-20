@@ -53,7 +53,11 @@ const request = (url, options = {}) =>
         const message =
           (await r.json().catch(() => ({}))).error ||
           "Server bilan aloqa xatosi";
-        toast.error(message);
+        const loggedOutRequest =
+          r.status === 401 &&
+          !localStorage.getItem(SESSION_KEY) &&
+          !url.startsWith("/api/auth/");
+        if (!loggedOutRequest) toast.error(message);
         throw new Error(message);
       }
       return r.status === 204 ? null : r.json();

@@ -88,6 +88,9 @@ const signToken = (payload) => {
     .digest("base64url");
   return `${body}.${signature}`;
 };
+const sessionDurationMs =
+  Math.min(90, Math.max(1, Number(process.env.SESSION_DAYS) || 30)) *
+  24 * 60 * 60 * 1000;
 const validToken = (token) => {
   try {
     const [body, signature] = token.split(".");
@@ -181,7 +184,7 @@ app.post("/api/auth/login", async (req, res, next) => {
   if (emailOk && passwordOk) {
     const user = { id: "admin", email: login, role: "ADMIN", fullName: "Administrator" };
     return res.json({
-      token: signToken({ sub: login, role: "ADMIN", exp: Date.now() + 12 * 60 * 60 * 1000 }),
+      token: signToken({ sub: login, role: "ADMIN", exp: Date.now() + sessionDurationMs }),
       user,
     });
   }
@@ -193,7 +196,7 @@ app.post("/api/auth/login", async (req, res, next) => {
   await sql`update students set last_active_at=now() where id=${student.id}`;
   const user = { id: student.id, nickname: student.nickname, role: "STUDENT", fullName: `${student.first_name} ${student.last_name}` };
   res.json({
-    token: signToken({ sub: student.id, role: "STUDENT", exp: Date.now() + 12 * 60 * 60 * 1000 }),
+    token: signToken({ sub: student.id, role: "STUDENT", exp: Date.now() + sessionDurationMs }),
     user,
   });
  } catch (e) { next(e); }
