@@ -418,6 +418,26 @@ tbody tr:hover {
   border-radius: 10px;
   background: var(--group-color);
 }
+.group-card__actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.group-card__actions .icon-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 10px;
+}
+.group-card__actions .icon-btn svg {
+  width: 15px;
+  height: 15px;
+}
+.group-card__actions .is-danger:hover {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+}
 .group-card > p {
   font-size: 12px;
   margin: 5px 0 20px;

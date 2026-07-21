@@ -509,7 +509,9 @@ app.patch("/api/groups/:id", async (req, res, next) => {
       g.teacher ?? null
     },teacher),days=coalesce(${g.days ?? null},days),room=coalesce(${
       g.room ?? null
-    },room),price=coalesce(${g.price ?? null},price),color=coalesce(${
+    },room),start_time=coalesce(${g.start || null},start_time),end_time=coalesce(${
+      g.end || null
+    },end_time),price=coalesce(${g.price ?? null},price),color=coalesce(${
       g.color || null
     },color),active=coalesce(${
       g.active ?? null
@@ -521,6 +523,9 @@ app.patch("/api/groups/:id", async (req, res, next) => {
 });
 app.delete("/api/groups/:id", async (req, res, next) => {
   try {
+    const [usage] = await sql`select count(*)::int count from students where group_id=${req.params.id}`;
+    if (usage.count > 0)
+      return res.status(409).json({ error: `Bu guruhda ${usage.count} ta o‘quvchi bor. Avval ularni boshqa guruhga o‘tkazing` });
     await sql`delete from groups where id=${req.params.id}`;
     res.status(204).end();
   } catch (e) {
