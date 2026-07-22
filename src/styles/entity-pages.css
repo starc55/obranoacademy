@@ -172,18 +172,67 @@
 }
 .progress-timeline > div {
   display: grid !important;
-  grid-template-columns: 105px 1fr;
+  grid-template-columns: 105px minmax(0, 1fr) auto;
   gap: 4px 12px;
+  align-items: center;
 }
 .progress-timeline small {
   grid-column: 2;
   color: var(--text-secondary);
+}
+.progress-event-actions {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  display: flex;
+  gap: 6px;
+}
+.progress-event-actions .icon-btn {
+  width: 30px;
+  height: 30px;
+}
+.progress-event-actions svg {
+  width: 14px;
+  height: 14px;
+}
+.progress-event-actions .danger {
+  color: var(--danger);
+}
+@media (max-width: 560px) {
+  .progress-timeline > div {
+    grid-template-columns: 1fr auto;
+  }
+  .progress-timeline > div > span:first-child,
+  .progress-timeline > div > strong,
+  .progress-timeline small {
+    grid-column: 1;
+  }
+  .progress-event-actions {
+    grid-column: 2;
+  }
 }
 .summary-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 14px;
+}
+.weekly-summary-embedded {
+  margin-top: 34px;
+}
+.weekly-summary-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 0 0 18px;
+  margin-bottom: 20px;
+}
+.weekly-summary-section-head > div {
+  display: grid;
+  gap: 4px;
+}
+.weekly-summary-section-head .btn {
+  flex: none;
 }
 .summary-head .badge {
   display: flex;
@@ -279,5 +328,12 @@
     align-items: flex-start;
     gap: 10px;
     flex-direction: column;
+  }
+  .weekly-summary-section-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .weekly-summary-section-head .btn {
+    width: 100%;
   }
 }

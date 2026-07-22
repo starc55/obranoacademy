@@ -7,8 +7,10 @@ import { Modal } from "../components/ui/Modal";
 import { TimePicker } from "../components/ui/TimePicker";
 import { useNavigate } from "react-router-dom";
 import { hydrateDB, request } from "../services/storage";
+import { useConfirm } from "../components/ui/ConfirmDialog";
 
 export function GroupsPage() {
+  const confirmAction = useConfirm();
   const navigate = useNavigate();
   const { groups, students } = useApp();
   const [open, setOpen] = useState(false);
@@ -35,7 +37,11 @@ export function GroupsPage() {
     } finally { setSaving(false); }
   };
   const remove = async (group) => {
-    if (!confirm(`“${group.name}” guruhi o‘chirilsinmi?`)) return;
+    if (!(await confirmAction({
+      title: "Guruhni o‘chirish",
+      message: `“${group.name}” guruhi butunlay o‘chirilsinmi?`,
+      confirmText: "O‘chirish",
+    }))) return;
     try {
       await request(`/api/groups/${group.id}`, { method: "DELETE" });
       await hydrateDB();

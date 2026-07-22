@@ -19,7 +19,6 @@ const Login = page("LoginPage"),
   Attendance = page("AttendancePage"),
   Payments = page("PaymentsPage"),
   Reports = page("ReportsPage"),
-  WeeklySummary = page("WeeklySummaryPage"),
   Alerts = page("AlertsPage"),
   Settings = page("SettingsPage"),
   AdminSubmissions = page("AdminSubmissionsPage"),
@@ -60,7 +59,7 @@ function ProtectedApp({ authenticated, role }) {
           <Route path="/attendance" element={<Attendance />} />
           <Route path="/payments" element={<Payments />} />
           <Route path="/reports" element={<Reports />} />
-          <Route path="/weekly-summary" element={<WeeklySummary />} />
+          <Route path="/weekly-summary" element={<Navigate to="/reports" replace />} />
           <Route path="/alerts" element={<Alerts />} />
           <Route path="/submissions" element={<AdminSubmissions />} />
           <Route path="/settings" element={<Settings />} />

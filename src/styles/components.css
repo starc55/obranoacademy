@@ -751,6 +751,50 @@ tbody tr:hover {
   align-items: center;
   justify-content: space-between;
 }
+.confirm-dialog {
+  padding: 26px 24px 22px;
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  text-align: center;
+}
+.confirm-dialog__icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 13%, transparent);
+}
+.confirm-dialog__icon.is-danger {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 13%, transparent);
+}
+.confirm-dialog__icon svg {
+  width: 25px;
+  height: 25px;
+}
+.confirm-dialog p {
+  max-width: 430px;
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.confirm-dialog .form-actions {
+  width: 100%;
+  margin-top: 4px;
+  padding: 0;
+}
+.btn.btn--danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff !important;
+}
+.btn.btn--danger:hover {
+  color: #fff !important;
+  filter: brightness(0.94);
+}
 .command-search {
   height: 58px;
   border-bottom: 1px solid var(--border);

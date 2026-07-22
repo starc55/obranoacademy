@@ -26,6 +26,7 @@ import { StatusBadge } from "../components/shared/StatusBadge";
 import { ImportModal } from "../components/students/ImportModal";
 import { importExportService } from "../services/importExportService";
 import { hydrateDB, request } from "../services/storage";
+import { useConfirm } from "../components/ui/ConfirmDialog";
 const matchesMastery = (score, mastery) => {
   if (mastery === "all") return true;
   if (mastery === "no_data") return score == null;
@@ -37,12 +38,14 @@ const matchesMastery = (score, mastery) => {
   return true;
 };
 export function StudentsPage() {
-  const { students, groups } = useApp(),
+  const confirmAction = useConfirm();
+  const { students, groups, attendance, payments } = useApp(),
     [q, setQ] = useState(""),
     [group, setGroup] = useState("all"),
     [status, setStatus] = useState("all"),
     [mastery, setMastery] = useState("all"),
     [insightScores, setInsightScores] = useState({}),
+    [studentInsights, setStudentInsights] = useState({}),
     [submissionStats, setSubmissionStats] = useState({}),
     [selected, setSelected] = useState([]),
     [edit, setEdit] = useState(null),
@@ -53,17 +56,24 @@ export function StudentsPage() {
     navigate = useNavigate();
   useEffect(() => {
     request("/api/insights/overview")
-      .then((result) =>
+      .then((result) => {
+        const details = Object.fromEntries(
+          (result.students || []).map((item) => [item.id, item]),
+        );
+        setStudentInsights(details);
         setInsightScores(
           Object.fromEntries(
             (result.students || []).map((item) => [
               item.id,
               item.health?.score ?? null,
-            ])
-          )
-        )
-      )
-      .catch(() => setInsightScores({}));
+            ]),
+          ),
+        );
+      })
+      .catch(() => {
+        setStudentInsights({});
+        setInsightScores({});
+      });
   }, [students]);
   useEffect(() => {
     request("/api/admin/students")
@@ -92,8 +102,12 @@ export function StudentsPage() {
       setSelected((x) =>
         x.includes(id) ? x.filter((y) => y !== id) : [...x, id]
       );
-  const remove = (ids) => {
-    if (confirm(`${ids.length} ta o‘quvchi o‘chirilsinmi?`)) {
+  const remove = async (ids) => {
+    if (await confirmAction({
+      title: "O‘quvchini o‘chirish",
+      message: `${ids.length} ta o‘quvchi va unga bog‘liq ma’lumotlar o‘chirilsinmi?`,
+      confirmText: "O‘chirish",
+    })) {
       ids.forEach(studentsService.remove);
       setSelected([]);
       toast.success("O‘quvchi o‘chirildi");
@@ -124,7 +138,11 @@ export function StudentsPage() {
       toast.info("Bu o‘quvchi allaqachon faollikdan chiqarilgan");
       return;
     }
-    if (!confirm(`${student.fullName} faollikdan chiqarilsinmi? Student panelga kira olmaydi.`)) return;
+    if (!(await confirmAction({
+      title: "Faollikni bekor qilish",
+      message: `${student.fullName} faollikdan chiqarilsinmi? O‘quvchi student panelga kira olmaydi.`,
+      confirmText: "Faollikdan chiqarish",
+    }))) return;
     try {
       await request(`/api/admin/students/${student.id}/status`, {
         method: "PATCH",
@@ -149,6 +167,81 @@ export function StudentsPage() {
     await navigator.clipboard.writeText(data);
     toast.success("Tanlangan qatorlar nusxalandi");
   };
+  const exportAnalytics = (studentRows, fileName) => {
+    if (!studentRows.length) {
+      toast.error("Yuklash uchun o‘quvchi tanlanmagan");
+      return;
+    }
+    const ids = new Set(studentRows.map((student) => student.id)),
+      statusNames = {
+        entered: "Kirdi",
+        not_entered: "Kirmadi",
+        late: "Kechikdi",
+        excused: "Sababli",
+        left: "Erta ketdi",
+      },
+      summary = studentRows.map((student) => {
+        const insight = studentInsights[student.id],
+          submission = submissionStats[student.id],
+          groupName =
+            student.enrollmentType === "individual"
+              ? "Individual"
+              : groups.find((item) => item.id === student.groupId)?.name ||
+                "Guruh belgilanmagan";
+        return {
+          "Ism-familiya": student.fullName,
+          Nickname: student.nickname || "—",
+          Telefon: student.phone || "—",
+          "O‘qiydi": groupName,
+          "Qo‘shilgan sana": student.joinedDate || "—",
+          "Davomat (%)": analyticsService.studentAttendance(student.id),
+          "O‘zlashtirish / Health Score (%)": insight?.health?.score ?? "—",
+          "Risk holati": insight?.risk?.label || "—",
+          "Risk sabablari":
+            insight?.risk?.reasons?.map((reason) => reason.title).join("; ") || "—",
+          "Yuborilgan vazifalar": submission?.totalSubmissions || 0,
+          "Vazifalar o‘rtacha bali": submission?.averageScore || 0,
+          "To‘lov holati": analyticsService.studentPaymentStatus(student.id),
+          "Oylik to‘lov": Number(student.monthlyFee || 0),
+          "Hisob holati": student.accountStatus || "NOT_ACTIVATED",
+        };
+      }),
+      attendanceRows = attendance.flatMap((session) =>
+        (session.records || [])
+          .filter((record) => ids.has(record.studentId))
+          .map((record) => {
+            const student = studentRows.find((item) => item.id === record.studentId);
+            return {
+              Sana: session.date,
+              "Ism-familiya": student?.fullName || "—",
+              Holati: statusNames[record.status] || record.status,
+              Izoh: record.note || "",
+            };
+          }),
+      ),
+      paymentRows = payments
+        .filter((payment) => ids.has(payment.studentId))
+        .map((payment) => {
+          const student = studentRows.find((item) => item.id === payment.studentId);
+          return {
+            Sana: payment.paidDate || payment.date || "—",
+            Oy: payment.month || "—",
+            "Ism-familiya": student?.fullName || "—",
+            Summa: Number(payment.amount || 0),
+            Holati: payment.status || "—",
+            "To‘lov turi": payment.method || "—",
+          };
+        });
+    importExportService.exportWorkbook(
+      {
+        "Umumiy analitika": summary,
+        Davomat: attendanceRows,
+        "To‘lovlar": paymentRows,
+      },
+      fileName,
+    );
+    toast.success(`${studentRows.length} ta o‘quvchi analitikasi yuklandi`);
+  };
   return (
     <>
       <div className="page-head">
@@ -162,11 +255,9 @@ export function StudentsPage() {
           </button>
           <button
             className="btn"
-            onClick={() =>
-              importExportService.exportExcel(rows, "oquvchilar.xlsx")
-            }
+            onClick={() => exportAnalytics(students, "barcha-oquvchilar-analitikasi.xlsx")}
           >
-            <Download /> Export
+            <Download /> Barcha analitika
           </button>
           <button className="btn btn--primary" onClick={() => setAdd(true)}>
             <Plus /> Yangi o‘quvchi
@@ -232,6 +323,17 @@ export function StudentsPage() {
               <strong>{selected.length} tanlandi</strong>
               <button onClick={copy}>
                 <Copy />
+              </button>
+              <button
+                title="Tanlanganlar analitikasini yuklash"
+                onClick={() =>
+                  exportAnalytics(
+                    students.filter((student) => selected.includes(student.id)),
+                    "tanlangan-oquvchilar-analitikasi.xlsx",
+                  )
+                }
+              >
+                <Download />
               </button>
               <button onClick={() => remove(selected)}>
                 <Trash2 />
@@ -367,6 +469,17 @@ export function StudentsPage() {
                   </td>
                   <td>
                     <div className="row-actions">
+                      <button
+                        title="O‘quvchi analitikasini yuklash"
+                        onClick={() =>
+                          exportAnalytics(
+                            [s],
+                            `${s.fullName.replace(/[^a-zA-Z0-9а-яА-ЯёЁ_-]+/g, "-")}-analitika.xlsx`,
+                          )
+                        }
+                      >
+                        <Download />
+                      </button>
                       <button onClick={() => setEdit(s)}>
                         <Edit3 />
                       </button>

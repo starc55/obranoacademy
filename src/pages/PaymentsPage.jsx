@@ -12,6 +12,7 @@ import { AppSelect, DatePicker } from "../components/ui/controls";
 import { useApp } from "../context/AppContext";
 import { paymentsService } from "../services/paymentsService";
 import { Modal } from "../components/ui/Modal";
+import { useConfirm } from "../components/ui/ConfirmDialog";
 import { StatusBadge } from "../components/shared/StatusBadge";
 const currentMonth = () => new Date().toISOString().slice(0, 7),
   todayValue = () => {
@@ -34,6 +35,7 @@ const currentMonth = () => new Date().toISOString().slice(0, 7),
       ? new Intl.DateTimeFormat("uz-UZ").format(new Date(`${value}T00:00:00`))
       : "—";
 export function PaymentsPage() {
+  const confirmAction = useConfirm();
   const { payments, students, groups } = useApp(),
     [open, setOpen] = useState(false),
     [edit, setEdit] = useState(null),
@@ -272,8 +274,12 @@ export function PaymentsPage() {
                         </button>
                         <button
                           aria-label="To‘lovni o‘chirish"
-                          onClick={() => {
-                            if (confirm("To‘lov yozuvi o‘chirilsinmi?")) {
+                          onClick={async () => {
+                            if (await confirmAction({
+                              title: "To‘lovni o‘chirish",
+                              message: "Bu to‘lov yozuvi butunlay o‘chirilsinmi?",
+                              confirmText: "O‘chirish",
+                            })) {
                               paymentsService.remove(p.id);
                               toast.success("To‘lov o‘chirildi");
                             }

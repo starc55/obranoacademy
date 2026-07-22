@@ -15,7 +15,9 @@ import { toast } from "sonner";
 import { useApp } from "../context/AppContext";
 import { importExportService } from "../services/importExportService";
 import { writeDB, readDB } from "../services/storage";
+import { useConfirm } from "../components/ui/ConfirmDialog";
 export function SettingsPage() {
+  const confirmAction = useConfirm();
   const { settings, updateSettings } = useApp(),
     ref = useRef();
   const save = (e) => {
@@ -38,8 +40,15 @@ export function SettingsPage() {
       toast.error("Backup fayli noto‘g‘ri");
     }
   };
-  const clear = () => {
-    if (confirm("Barcha ma’lumotlar o‘chirilsinmi?")) {
+  const clear = async () => {
+    if (
+      await confirmAction({
+        title: "Barcha ma’lumotlarni o‘chirish",
+        message:
+          "O‘quvchilar, guruhlar, davomat va to‘lovlar butunlay o‘chirilsinmi? Bu amalni ortga qaytarib bo‘lmaydi.",
+        confirmText: "Hammasini o‘chirish",
+      })
+    ) {
       const db = readDB();
       writeDB({
         ...db,

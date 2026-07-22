@@ -8,6 +8,7 @@ import { Modal } from "../ui/Modal";
 import { studentsService } from "../../services/studentsService";
 import { paymentsService } from "../../services/paymentsService";
 import { useApp } from "../../context/AppContext";
+import { useConfirm } from "../ui/ConfirmDialog";
 const schema = z
   .object({
     firstName: z.string().min(2, "Ismni kiriting"),
@@ -45,6 +46,7 @@ const schema = z
       });
   });
 export function StudentForm({ open, onClose, student }) {
+  const confirmAction = useConfirm();
   const { groups, settings } = useApp(),
     {
       register,
@@ -133,9 +135,13 @@ export function StudentForm({ open, onClose, student }) {
     const group = groups.find((g) => g.id === id);
     if (group?.price) setFee(Number(group.price));
   };
-  const close = () => {
-    if (!isDirty || confirm("Saqlanmagan o‘zgarishlar bor. Yopilsinmi?"))
-      onClose();
+  const close = async () => {
+    if (!isDirty || await confirmAction({
+      title: "O‘zgarishlarni bekor qilish",
+      message: "Saqlanmagan o‘zgarishlar bor. Formani yopishni xohlaysizmi?",
+      confirmText: "Yopish",
+      danger: false,
+    })) onClose();
   };
   const invalid = (formErrors) => {
     const first = Object.values(formErrors)[0]?.message;

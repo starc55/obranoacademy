@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import { useApp } from "../context/AppContext";
 import { importExportService } from "../services/importExportService";
+import { WeeklySummaryPage } from "./WeeklySummaryPage";
 export function ReportsPage() {
   const { students, groups, attendance, payments } = useApp(),
     data = groups.map((g) => ({
@@ -138,6 +139,7 @@ export function ReportsPage() {
           </table>
         </div>
       </section>
+      <WeeklySummaryPage embedded />
     </>
   );
 }

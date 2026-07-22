@@ -59,4 +59,25 @@ export const importExportService = {
     XLSX.utils.book_append_sheet(wb, ws, "Data");
     XLSX.writeFile(wb, name);
   },
+  exportWorkbook(sheets, name = "hisobot.xlsx") {
+    const wb = XLSX.utils.book_new();
+    Object.entries(sheets).forEach(([sheetName, rows]) => {
+      const safeName = sheetName.replace(/[\\/?*:[\]]/g, " ").slice(0, 31),
+        ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Ma_lumot: "Ma’lumot yo‘q" }]);
+      if (rows.length) {
+        const widths = Object.keys(rows[0]).map((key) => ({
+          wch: Math.min(
+            45,
+            Math.max(
+              key.length + 2,
+              ...rows.map((row) => String(row[key] ?? "").length + 2),
+            ),
+          ),
+        }));
+        ws["!cols"] = widths;
+      }
+      XLSX.utils.book_append_sheet(wb, ws, safeName || "Data");
+    });
+    XLSX.writeFile(wb, name);
+  },
 };

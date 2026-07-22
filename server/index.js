@@ -463,6 +463,42 @@ app.post("/api/students/:id/timeline", async (req, res, next) => {
     next(e);
   }
 });
+app.patch("/api/students/:studentId/timeline/:eventId", async (req, res, next) => {
+  try {
+    const e = req.body,
+      allowed = [
+        "assignment_created",
+        "assignment_submitted",
+        "assignment_late",
+        "grade_added",
+        "feedback_added",
+      ],
+      title = String(e.title || "").trim(),
+      value = e.value === "" || e.value == null ? null : Number(e.value);
+    if (!allowed.includes(e.type) || !title || (value != null && !Number.isFinite(value)))
+      return res.status(400).json({ error: "Event ma’lumoti noto‘g‘ri" });
+    const [row] = await sql`update student_progress_events set
+      type=${e.type}, title=${title}, description=${e.description || ""}, value=${value}
+      where id=${req.params.eventId} and student_id=${req.params.studentId}
+      returning id,type,title,description,value,metadata,occurred_at`;
+    if (!row) return res.status(404).json({ error: "Progress yozuvi topilmadi" });
+    res.json({ ...row, occurredAt: row.occurred_at });
+  } catch (e) {
+    next(e);
+  }
+});
+app.delete("/api/students/:studentId/timeline/:eventId", async (req, res, next) => {
+  try {
+    const rows = await sql`delete from student_progress_events
+      where id=${req.params.eventId} and student_id=${req.params.studentId}
+      returning id`;
+    if (!rows.length)
+      return res.status(404).json({ error: "Progress yozuvi topilmadi" });
+    res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
+});
 app.get("/api/insights/overview", async (_req, res, next) => {
   try {
     const students =

@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { request } from "../services/storage";
-export function WeeklySummaryPage() {
+export function WeeklySummaryPage({ embedded = false }) {
   const [rows, setRows] = useState([]),
     [loading, setLoading] = useState(true),
     [generating, setGenerating] = useState(false);
@@ -36,10 +36,14 @@ export function WeeklySummaryPage() {
   };
   const current = rows[0];
   return (
-    <>
-      <div className="page-head">
+    <section className={embedded ? "weekly-summary-embedded" : undefined}>
+      <div
+        className={
+          embedded ? "section-head weekly-summary-section-head" : "page-head"
+        }
+      >
         <div>
-          <h2>Haftalik hisobot</h2>
+          {embedded ? <h3>Haftalik hisobot</h3> : <h2>Haftalik hisobot</h2>}
           <p>Davomat, risk va progress bo‘yicha haftalik snapshot</p>
         </div>
         <button
@@ -125,6 +129,6 @@ export function WeeklySummaryPage() {
           </section>
         </>
       )}
-    </>
+    </section>
   );
 }
