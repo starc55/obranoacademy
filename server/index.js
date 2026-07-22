@@ -1110,8 +1110,6 @@ app.post("/api/alerts/generate", async (_req, res, next) => {
 app.patch("/api/alerts/:id", async (req, res, next) => {
   try {
     const status = String(req.body.status || "").toUpperCase();
-    if (status === 'ACTIVE')
-      return res.status(400).json({ error:"Hisobni faqat o‘quvchining o‘zi faollashtiradi" });
     if (!["OPEN", "ACKNOWLEDGED", "RESOLVED", "DISMISSED"].includes(status))
       return res.status(400).json({ error: "Alert status noto‘g‘ri" });
     const [row] =
@@ -1310,8 +1308,12 @@ app.get("/api/admin/students", requireRole("ADMIN"), async (req, res, next) => {
 app.patch("/api/admin/students/:id/status", requireRole("ADMIN"), async (req, res, next) => {
   try {
     const status = String(req.body.status || "").toUpperCase();
-    if (!['ACTIVE','BLOCKED'].includes(status)) return res.status(400).json({ error:"Status noto‘g‘ri" });
-    const [row] = await sql`update students set account_status=${status},updated_at=now() where id=${req.params.id} returning id,account_status`;
+    if (!['NOT_ACTIVATED','BLOCKED'].includes(status))
+      return res.status(400).json({ error:"Hisobni faqat o‘quvchining o‘zi faollashtiradi" });
+    const [row] = status === 'NOT_ACTIVATED'
+      ? await sql`update students set account_status='NOT_ACTIVATED',password_hash=null,temporary_password_hash=null,activated_at=null,updated_at=now() where id=${req.params.id} returning id,account_status`
+      : await sql`update students set account_status='BLOCKED',updated_at=now() where id=${req.params.id} returning id,account_status`;
+    if (!row) return res.status(404).json({ error:"Student topilmadi" });
     res.json(row);
   } catch (e) { next(e); }
 });

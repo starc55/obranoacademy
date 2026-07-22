@@ -15,6 +15,8 @@ import {
   ChevronLeft,
   ChevronRight,
   PackageOpen,
+  UserCheck,
+  UserX,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useApp } from "../context/AppContext";
@@ -23,7 +25,7 @@ import { StudentForm } from "../components/students/StudentForm";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { ImportModal } from "../components/students/ImportModal";
 import { importExportService } from "../services/importExportService";
-import { request } from "../services/storage";
+import { hydrateDB, request } from "../services/storage";
 const matchesMastery = (score, mastery) => {
   if (mastery === "all") return true;
   if (mastery === "no_data") return score == null;
@@ -44,6 +46,7 @@ export function StudentsPage() {
     [submissionStats, setSubmissionStats] = useState({}),
     [selected, setSelected] = useState([]),
     [edit, setEdit] = useState(null),
+    [actionMenu, setActionMenu] = useState(null),
     [add, setAdd] = useState(false),
     [imp, setImp] = useState(false),
     [page, setPage] = useState(1),
@@ -94,6 +97,43 @@ export function StudentsPage() {
       ids.forEach(studentsService.remove);
       setSelected([]);
       toast.success("O‘quvchi o‘chirildi");
+    }
+  };
+  const prepareActivation = async (student) => {
+    setActionMenu(null);
+    if (student.accountStatus === "ACTIVE") {
+      toast.info("Bu o‘quvchi allaqachon faol");
+      return;
+    }
+    try {
+      if (student.accountStatus === "BLOCKED") {
+        await request(`/api/admin/students/${student.id}/status`, {
+          method: "PATCH",
+          body: JSON.stringify({ status: "NOT_ACTIVATED" }),
+        });
+        await hydrateDB();
+      }
+      setEdit({ ...student, accountStatus: "NOT_ACTIVATED" });
+    } catch {
+      /* request xabarni ko‘rsatadi */
+    }
+  };
+  const deactivate = async (student) => {
+    setActionMenu(null);
+    if (student.accountStatus === "BLOCKED") {
+      toast.info("Bu o‘quvchi allaqachon faollikdan chiqarilgan");
+      return;
+    }
+    if (!confirm(`${student.fullName} faollikdan chiqarilsinmi? Student panelga kira olmaydi.`)) return;
+    try {
+      await request(`/api/admin/students/${student.id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "BLOCKED" }),
+      });
+      await hydrateDB();
+      toast.success("O‘quvchi faollikdan chiqarildi");
+    } catch {
+      /* request xabarni ko‘rsatadi */
     }
   };
   const copy = async () => {
@@ -333,12 +373,15 @@ export function StudentsPage() {
                       <button onClick={() => remove([s.id])}>
                         <Trash2 />
                       </button>
-                      <button
-                        title="Nickname va faollashtirish kodini tayyorlash"
-                        onClick={() => setEdit(s)}
-                      >
-                        <MoreHorizontal />
-                      </button>
+                      <div className="row-action-menu-wrap">
+                        <button title="Hisob amallari" onClick={() => setActionMenu((current) => current === s.id ? null : s.id)}><MoreHorizontal /></button>
+                        {actionMenu === s.id && (
+                          <div className="row-action-menu">
+                            <button type="button" onClick={() => prepareActivation(s)} disabled={s.accountStatus === "ACTIVE"}><UserCheck /><span><strong>Faollashtirish</strong><small>Nickname va yangi kod tayyorlash</small></span></button>
+                            <button type="button" className="is-danger" onClick={() => deactivate(s)} disabled={s.accountStatus === "BLOCKED"}><UserX /><span><strong>Faollikni bekor qilish</strong><small>Student kirishini bloklash</small></span></button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </td>
                 </tr>
