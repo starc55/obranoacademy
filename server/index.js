@@ -1,7 +1,12 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  createHmac,
+  randomBytes,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
 import { neon } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import rateLimit from "express-rate-limit";
@@ -1162,8 +1167,18 @@ const uploadLimiter = rateLimit({
     legacyHeaders: false,
     message: { error: "Fayl yuborish limiti oshdi. Keyinroq urinib ko‘ring" },
   }),
+  uploadMaxMb = Math.min(
+    50,
+    Math.max(1, Number(process.env.FILE_UPLOAD_MAX_MB) || 10),
+  ),
+  uploadMaxBytes = uploadMaxMb * 1024 * 1024,
   upload = multer({
     storage: multer.memoryStorage(),
+    limits: {
+      fileSize: uploadMaxBytes,
+      files: 30,
+      fields: 30,
+    },
   }),
   safeName = (name = "file") =>
     String(name)
@@ -1217,6 +1232,14 @@ const validateUpload = async (file) => {
     content: file.buffer,
   };
 };
+const validateUploadBatch = (files) => {
+  const totalBytes = files.reduce((total, file) => total + file.size, 0);
+  if (totalBytes > uploadMaxBytes)
+    throw Object.assign(
+      new Error(`Barcha fayllarning jami hajmi ${uploadMaxMb} MB dan oshmasin`),
+      { status: 413 },
+    );
+};
 const createStudentNotification = (studentId, type, title, message, url, key) =>
   sql`insert into notifications(type,student_id,title,message,due_date,dedupe_key,audience,related_url) values(${type},${studentId},${title},${message},current_date,${key},'STUDENT',${url}) on conflict(dedupe_key) do nothing`;
 
@@ -1250,11 +1273,19 @@ app.post("/api/student/submissions", uploadLimiter, requireRole("STUDENT"), uplo
       return res.status(400).json({ error: "Vazifa nomini kiriting" });
     if (!textContent && !Object.values(urls).some(Boolean) && !files.length)
       return res.status(400).json({ error: "Kamida matn, link yoki fayl yuboring" });
-    const [row] = await sql`insert into submissions(student_id,title,description,category,text_content,github_url,demo_url,figma_url,external_url) values(${req.auth.sub},${title},${String(req.body.description || "").trim()},${String(req.body.category || "Umumiy").trim()},${textContent},${urls.github},${urls.demo},${urls.figma},${urls.external}) returning *`;
-    for (const file of files)
-      await sql`insert into submission_files(submission_id,original_name,mime_type,size_bytes,content) values(${row.id},${file.name},${file.mime},${file.size},${file.content})`;
-    await sql`insert into notifications(type,student_id,title,message,due_date,dedupe_key,audience,related_url) values('new_submission',${req.auth.sub},'Yangi vazifa yuborildi',${title},current_date,${`new_submission:${row.id}`},'ADMIN',${`/submissions/${row.id}`})`;
-    await createStudentNotification(req.auth.sub, "submission_sent", "Vazifa yuborildi", title, `/student/submissions/${row.id}`, `submission_sent:${row.id}`);
+    validateUploadBatch(files);
+    const submissionId = randomUUID(),
+      queries = [
+        sql`insert into submissions(id,student_id,title,description,category,text_content,github_url,demo_url,figma_url,external_url) values(${submissionId},${req.auth.sub},${title},${String(req.body.description || "").trim()},${String(req.body.category || "Umumiy").trim()},${textContent},${urls.github},${urls.demo},${urls.figma},${urls.external}) returning *`,
+        ...files.map(
+          (file) =>
+            sql`insert into submission_files(submission_id,original_name,mime_type,size_bytes,content) values(${submissionId},${file.name},${file.mime},${file.size},${file.content})`,
+        ),
+        sql`insert into notifications(type,student_id,title,message,due_date,dedupe_key,audience,related_url) values('new_submission',${req.auth.sub},'Yangi vazifa yuborildi',${title},current_date,${`new_submission:${submissionId}`},'ADMIN',${`/submissions/${submissionId}`}) on conflict(dedupe_key) do nothing`,
+        sql`insert into notifications(type,student_id,title,message,due_date,dedupe_key,audience,related_url) values('submission_sent',${req.auth.sub},'Vazifa yuborildi',${title},current_date,${`submission_sent:${submissionId}`},'STUDENT',${`/student/submissions/${submissionId}`}) on conflict(dedupe_key) do nothing`,
+      ],
+      results = await sql.transaction(queries),
+      row = results[0][0];
     res.status(201).json(submissionOut({ ...row, has_file: files.length > 0, file_name: files[0]?.name }));
   } catch (e) { next(e); }
 });
@@ -1281,6 +1312,56 @@ app.get("/api/student/submissions/:id", requireRole("STUDENT"), async (req, res,
     res.json({ ...submissionOut(row), revisions, files: files.map((file) => ({ id:file.id,name:file.original_name,mimeType:file.mime_type,size:Number(file.size_bytes),url:`/api/student/submissions/${row.id}/files/${file.id}` })) });
   } catch (e) { next(e); }
 });
+app.patch("/api/student/submissions/:id", uploadLimiter, requireRole("STUDENT"), upload.array("files"), async (req, res, next) => {
+  try {
+    const [current] = await sql`select * from submissions where id=${req.params.id} and student_id=${req.auth.sub}`;
+    if (!current) return res.status(404).json({ error: "Vazifa topilmadi" });
+    const title = String(req.body.title ?? current.title).trim(),
+      description = String(req.body.description ?? current.description).trim(),
+      category = String(req.body.category ?? current.category ?? "Umumiy").trim() || "Umumiy",
+      textContent = String(req.body.textContent ?? current.text_content).trim(),
+      urls = {
+        github: req.body.githubUrl === undefined ? current.github_url : validUrl(req.body.githubUrl),
+        demo: req.body.demoUrl === undefined ? current.demo_url : validUrl(req.body.demoUrl),
+        figma: req.body.figmaUrl === undefined ? current.figma_url : validUrl(req.body.figmaUrl),
+        external: req.body.externalUrl === undefined ? current.external_url : validUrl(req.body.externalUrl),
+      },
+      files = await Promise.all((req.files || []).map(validateUpload));
+    validateUploadBatch(files);
+    let removeFileIds = [];
+    try {
+      removeFileIds = JSON.parse(req.body.removeFileIds || "[]");
+      if (!Array.isArray(removeFileIds)) removeFileIds = [];
+    } catch {
+      return res.status(400).json({ error: "O‘chiriladigan fayllar noto‘g‘ri" });
+    }
+    if (title.length < 2)
+      return res.status(400).json({ error: "Vazifa nomini kiriting" });
+    const existingFiles = await sql`select id from submission_files where submission_id=${current.id}`,
+      ownedFileIds = new Set(existingFiles.map((file) => file.id)),
+      safeRemoveIds = [...new Set(removeFileIds.filter((fileId) => ownedFileIds.has(fileId)))],
+      remainingFileCount = existingFiles.length - safeRemoveIds.length + files.length;
+    if (!textContent && !Object.values(urls).some(Boolean) && remainingFileCount === 0)
+      return res.status(400).json({ error: "Kamida matn, link yoki fayl qoldiring" });
+    await sql`insert into submission_revisions(submission_id,revision_number,snapshot,feedback,score) values(${current.id},${current.revision_number},${JSON.stringify(current)}::jsonb,${current.admin_feedback},${current.score}) on conflict do nothing`;
+    for (const fileId of safeRemoveIds)
+      await sql`delete from submission_files where id=${fileId} and submission_id=${current.id}`;
+    const nextRevision = current.revision_number + 1;
+    const [row] = await sql`update submissions set title=${title},description=${description},category=${category},text_content=${textContent},github_url=${urls.github},demo_url=${urls.demo},figma_url=${urls.figma},external_url=${urls.external},status='SUBMITTED',score=null,admin_feedback='',reviewed_at=null,reviewed_by=null,revision_number=${nextRevision},submitted_at=now(),updated_at=now() where id=${current.id} returning *`;
+    for (const file of files)
+      await sql`insert into submission_files(submission_id,original_name,mime_type,size_bytes,content) values(${row.id},${file.name},${file.mime},${file.size},${file.content})`;
+    await sql`insert into notifications(type,student_id,title,message,due_date,dedupe_key,audience,related_url) values('submission_edited',${req.auth.sub},'Vazifa tahrirlandi',${title},current_date,${`submission_edited:${row.id}:${nextRevision}`},'ADMIN',${`/submissions/${row.id}`})`;
+    res.json(submissionOut({ ...row, has_file: remainingFileCount > 0, file_name: null }));
+  } catch (e) { next(e); }
+});
+app.delete("/api/student/submissions/:id", requireRole("STUDENT"), async (req, res, next) => {
+  try {
+    const rows = await sql`delete from submissions where id=${req.params.id} and student_id=${req.auth.sub} returning id`;
+    if (!rows.length) return res.status(404).json({ error: "Vazifa topilmadi" });
+    await sql`delete from notifications where related_url in (${`/submissions/${req.params.id}`},${`/student/submissions/${req.params.id}`})`;
+    res.status(204).end();
+  } catch (e) { next(e); }
+});
 app.post("/api/student/submissions/:id/revisions", uploadLimiter, requireRole("STUDENT"), upload.array("files"), async (req, res, next) => {
   try {
     const [current] = await sql`select * from submissions where id=${req.params.id} and student_id=${req.auth.sub}`;
@@ -1295,6 +1376,7 @@ app.post("/api/student/submissions/:id/revisions", uploadLimiter, requireRole("S
       demo = validUrl(req.body.demoUrl) || current.demo_url,
       figma = validUrl(req.body.figmaUrl) || current.figma_url,
       external = validUrl(req.body.externalUrl) || current.external_url;
+    validateUploadBatch(files);
     if (!text && !github && !demo && !figma && !external && !files.length)
       return res.status(400).json({ error: "Kamida matn, link yoki fayl yuboring" });
     const [row] = await sql`update submissions set text_content=${text},github_url=${github},demo_url=${demo},figma_url=${figma},external_url=${external},status='SUBMITTED',score=null,admin_feedback='',reviewed_at=null,reviewed_by=null,revision_number=${nextRevision},submitted_at=now(),updated_at=now() where id=${current.id} returning *`;
@@ -1429,18 +1511,37 @@ setInterval(
   () => generateSmartAlerts().catch(console.error),
   6 * 60 * 60 * 1000,
 );
-app.use((err, _req, res, _next) => {
-  console.error(err);
-  const status = err.status || (err.code === "LIMIT_FILE_SIZE" ? 413 : err.code === "23505" ? 409 : 500);
+app.use((err, req, res, _next) => {
+  console.error("[api:error]", {
+    method: req.method,
+    path: req.originalUrl?.split("?")[0],
+    status: err.status,
+    code: err.code,
+    message: err.message,
+    stack: err.stack,
+  });
+  const uploadErrors = {
+      LIMIT_FILE_SIZE: `Bitta fayl hajmi ${uploadMaxMb} MB dan oshmasin`,
+      LIMIT_FILE_COUNT: "Bir urinishda ko‘pi bilan 30 ta fayl yuborish mumkin",
+      LIMIT_FIELD_COUNT: "Forma maydonlari soni juda ko‘p",
+      LIMIT_UNEXPECTED_FILE: "Fayl maydoni noto‘g‘ri yuborildi",
+    },
+    status =
+      err.status ||
+      (uploadErrors[err.code]
+        ? 413
+        : err.code === "23505"
+          ? 409
+          : 500);
   res.status(status).json({
     error:
-      err.code === "LIMIT_FILE_SIZE"
-        ? "Fayl server qabul qiladigan hajmdan oshib ketdi"
+      uploadErrors[err.code]
+        ? uploadErrors[err.code]
         : err.code === "23505"
           ? "Bu ma’lumot avval mavjud"
           : status < 500
             ? err.message
-            : "Server xatosi",
+            : "Vazifani serverda saqlashda xato yuz berdi. Qayta urinib ko‘ring",
   });
 });
 const PORT = process.env.PORT || 5000;

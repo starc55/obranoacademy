@@ -389,7 +389,8 @@ tbody tr:hover {
   background: var(--surface);
   box-shadow: 0 18px 50px #0004;
 }
-.row-action-menu > button {
+.row-action-menu > button,
+.row-action-menu > a {
   width: 100%;
   min-height: 54px;
   padding: 9px 10px;
@@ -398,8 +399,11 @@ tbody tr:hover {
   gap: 10px;
   border-radius: 9px;
   text-align: left;
+  color: var(--text-secondary);
+  text-decoration: none;
 }
-.row-action-menu > button:hover:not(:disabled) {
+.row-action-menu > button:hover:not(:disabled),
+.row-action-menu > a:hover {
   background: var(--surface-secondary);
   color: var(--text-primary);
 }
@@ -407,19 +411,23 @@ tbody tr:hover {
   opacity: .42;
   cursor: not-allowed;
 }
-.row-action-menu > button > svg {
+.row-action-menu > button > svg,
+.row-action-menu > a > svg {
   width: 17px;
   flex: none;
 }
-.row-action-menu > button > span {
+.row-action-menu > button > span,
+.row-action-menu > a > span {
   display: grid;
   gap: 3px;
 }
-.row-action-menu > button strong {
+.row-action-menu > button strong,
+.row-action-menu > a strong {
   color: var(--text-primary);
   font-size: 12px;
 }
-.row-action-menu > button small {
+.row-action-menu > button small,
+.row-action-menu > a small {
   color: var(--text-secondary);
   font-size: 10px;
   white-space: normal;

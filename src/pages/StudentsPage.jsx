@@ -469,29 +469,15 @@ export function StudentsPage() {
                   </td>
                   <td>
                     <div className="row-actions">
-                      <button
-                        title="O‘quvchi analitikasini yuklash"
-                        onClick={() =>
-                          exportAnalytics(
-                            [s],
-                            `${s.fullName.replace(/[^a-zA-Z0-9а-яА-ЯёЁ_-]+/g, "-")}-analitika.xlsx`,
-                          )
-                        }
-                      >
-                        <Download />
-                      </button>
-                      <button onClick={() => setEdit(s)}>
-                        <Edit3 />
-                      </button>
-                      <button onClick={() => remove([s.id])}>
-                        <Trash2 />
-                      </button>
                       <div className="row-action-menu-wrap">
-                        <button title="Hisob amallari" onClick={() => setActionMenu((current) => current === s.id ? null : s.id)}><MoreHorizontal /></button>
+                        <button title="O‘quvchi amallari" aria-label="O‘quvchi amallari" onClick={() => setActionMenu((current) => current === s.id ? null : s.id)}><MoreHorizontal /></button>
                         {actionMenu === s.id && (
                           <div className="row-action-menu">
+                            <button type="button" onClick={() => { setActionMenu(null); setEdit(s); }}><Edit3 /><span><strong>Tahrirlash</strong><small>O‘quvchi ma’lumotlarini yangilash</small></span></button>
+                            <button type="button" onClick={() => { setActionMenu(null); exportAnalytics([s], `${s.fullName.replace(/[^a-zA-Z0-9а-яА-ЯёЁ_-]+/g, "-")}-analitika.xlsx`); }}><Download /><span><strong>Analitikani yuklash</strong><small>Shaxsiy Excel hisobotini olish</small></span></button>
                             <button type="button" onClick={() => prepareActivation(s)} disabled={s.accountStatus === "ACTIVE"}><UserCheck /><span><strong>Faollashtirish</strong><small>Nickname va yangi kod tayyorlash</small></span></button>
                             <button type="button" className="is-danger" onClick={() => deactivate(s)} disabled={s.accountStatus === "BLOCKED"}><UserX /><span><strong>Faollikni bekor qilish</strong><small>Student kirishini bloklash</small></span></button>
+                            <button type="button" className="is-danger" onClick={() => { setActionMenu(null); remove([s.id]); }}><Trash2 /><span><strong>O‘chirish</strong><small>O‘quvchini butunlay olib tashlash</small></span></button>
                           </div>
                         )}
                       </div>

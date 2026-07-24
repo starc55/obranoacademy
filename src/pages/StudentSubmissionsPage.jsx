@@ -1,8 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Search, Eye } from "lucide-react";
+import { Search, MoreHorizontal, Edit3, Trash2, Eye } from "lucide-react";
+import { toast } from "sonner";
 import { AppSelect } from "../components/ui/AppSelect";
 import { request } from "../services/storage";
+import { SubmissionModal } from "../components/students/SubmissionModal";
+import { useConfirm } from "../components/ui/ConfirmDialog";
 const labels = {
   SUBMITTED: "Yuborildi",
   UNDER_REVIEW: "Tekshirilmoqda",
@@ -11,23 +14,55 @@ const labels = {
   REJECTED: "Rad etildi",
 };
 export function StudentSubmissionsPage() {
+  const confirmAction = useConfirm();
   const [data, setData] = useState({ items: [], page: 1, pages: 1, total: 0 }),
     [q, setQ] = useState(""),
     [status, setStatus] = useState(""),
     [page, setPage] = useState(1),
     [loading, setLoading] = useState(true),
-    [error, setError] = useState("");
-  useEffect(() => {
+    [error, setError] = useState(""),
+    [actionMenu, setActionMenu] = useState(null),
+    [editing, setEditing] = useState(null);
+  const load = useCallback(() => {
     setLoading(true);
-    request(
+    setError("");
+    return request(
       `/api/student/submissions?page=${page}&search=${encodeURIComponent(
-        q
-      )}&status=${status}`
+        q,
+      )}&status=${status}`,
     )
       .then(setData)
       .catch(() => setError("Vazifalarni yuklab bo‘lmadi"))
       .finally(() => setLoading(false));
-  }, [q, status, page]);
+  }, [page, q, status]);
+  useEffect(() => {
+    load();
+  }, [load]);
+  const openEdit = async (submission) => {
+    setActionMenu(null);
+    try {
+      setEditing(await request(`/api/student/submissions/${submission.id}`));
+    } catch {
+      /* request xabarni ko‘rsatadi */
+    }
+  };
+  const remove = async (submission) => {
+    setActionMenu(null);
+    if (!(await confirmAction({
+      title: "Vazifani o‘chirish",
+      message: `“${submission.title}” vazifasi va uning fayllari butunlay o‘chirilsinmi?`,
+      confirmText: "O‘chirish",
+    }))) return;
+    try {
+      await request(`/api/student/submissions/${submission.id}`, {
+        method: "DELETE",
+      });
+      toast.success("Vazifa o‘chirildi");
+      await load();
+    } catch {
+      /* request xabarni ko‘rsatadi */
+    }
+  };
   return (
     <>
       <div className="page-head">
@@ -96,6 +131,53 @@ export function StudentSubmissionsPage() {
                   </td>
                   <td>{x.score ?? "—"}</td>
                   <td>{x.adminFeedback ? "Bor" : "—"}</td>
+                  <td>
+                    <div className="row-actions submission-row-actions">
+                      <div className="row-action-menu-wrap">
+                        <button
+                          type="button"
+                          title="Vazifa amallari"
+                          aria-label="Vazifa amallari"
+                          onClick={() =>
+                            setActionMenu((current) =>
+                              current === x.id ? null : x.id,
+                            )
+                          }
+                        >
+                          <MoreHorizontal />
+                        </button>
+                        {actionMenu === x.id && (
+                          <div className="row-action-menu">
+                            <Link to={`/student/submissions/${x.id}`}>
+                              <Eye />
+                              <span>
+                                <strong>Ochish</strong>
+                                <small>Vazifa va javobni ko‘rish</small>
+                              </span>
+                            </Link>
+                            <button type="button" onClick={() => openEdit(x)}>
+                              <Edit3 />
+                              <span>
+                                <strong>Tahrirlash</strong>
+                                <small>Ma’lumot va fayllarni yangilash</small>
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              className="is-danger"
+                              onClick={() => remove(x)}
+                            >
+                              <Trash2 />
+                              <span>
+                                <strong>O‘chirish</strong>
+                                <small>Vazifani butunlay olib tashlash</small>
+                              </span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -127,6 +209,12 @@ export function StudentSubmissionsPage() {
           </div>
         </footer>
       </section>
+      <SubmissionModal
+        open={!!editing}
+        submission={editing}
+        onClose={() => setEditing(null)}
+        onCreated={load}
+      />
     </>
   );
 }

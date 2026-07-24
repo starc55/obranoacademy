@@ -50,9 +50,40 @@ const request = (url, options = {}) =>
   })
     .then(async (r) => {
       if (!r.ok) {
-        const message =
-          (await r.json().catch(() => ({}))).error ||
-          "Server bilan aloqa xatosi";
+        const contentType = r.headers.get("content-type") || "",
+          responseText = await r.text().catch(() => ""),
+          payload = contentType.includes("application/json")
+            ? (() => {
+                try {
+                  return JSON.parse(responseText);
+                } catch {
+                  return {};
+                }
+              })()
+            : {},
+          fallbackMessages = {
+            400: "Yuborilgan ma’lumotlarni tekshiring",
+            401: "Sessiya tugagan. Qayta kiring",
+            403: "Bu amal uchun ruxsat yo‘q",
+            404: "So‘ralgan API endpoint topilmadi",
+            409: "Ma’lumotlar to‘qnashuvi yuz berdi",
+            413: "Yuklanayotgan fayllar hajmi juda katta",
+            429: "Juda ko‘p urinish. Birozdan keyin qayta urinib ko‘ring",
+            500: "Server ma’lumotni saqlay olmadi",
+            502: "Server vaqtincha javob bermayapti",
+            503: "Server vaqtincha mavjud emas",
+          },
+          safeServerText =
+            responseText &&
+            !responseText.trimStart().startsWith("<") &&
+            responseText.length < 300
+              ? responseText
+              : "",
+          message =
+            payload.error ||
+            safeServerText ||
+            fallbackMessages[r.status] ||
+            `Server xatosi (${r.status})`;
         const loggedOutRequest =
           r.status === 401 &&
           !localStorage.getItem(SESSION_KEY) &&
@@ -63,8 +94,16 @@ const request = (url, options = {}) =>
       return r.status === 204 ? null : r.json();
     })
     .catch((error) => {
-      if (error.name === "TimeoutError")
+      if (error.name === "TimeoutError") {
         toast.error("Server javobi kechikdi. Qayta urinib ko‘ring");
+        throw new Error("Server javobi kechikdi");
+      }
+      if (error instanceof TypeError) {
+        const message =
+          "Serverga ulanib bo‘lmadi. Internet yoki API manzilini tekshiring";
+        toast.error(message);
+        throw new Error(message);
+      }
       throw error;
     });
 export function readDB() {
