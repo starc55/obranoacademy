@@ -160,3 +160,109 @@ export function detectRisk({ attendance = [], health }) {
     detectedAt: new Date().toISOString(),
   };
 }
+
+export function calculateStudentLevel({
+  attendance = [],
+  submissions = [],
+}) {
+  const factors = {};
+  const attendanceRows = attendance.filter((row) => row.status);
+  if (attendanceRows.length) {
+    const points = attendanceRows.reduce(
+      (total, row) =>
+        total +
+        (row.status === "entered"
+          ? 100
+          : row.status === "late"
+            ? 75
+            : row.status === "excused"
+              ? 60
+              : 0),
+      0,
+    );
+    factors.attendance = {
+      label: "Davomat",
+      score: clamp(points / attendanceRows.length),
+      weight: 35,
+    };
+  }
+  if (submissions.length) {
+    const taskPoints = submissions.reduce(
+      (total, item) =>
+        total +
+        ({
+          APPROVED: 100,
+          UNDER_REVIEW: 80,
+          SUBMITTED: 75,
+          REVISION_REQUESTED: 45,
+          REJECTED: 25,
+        }[item.status] ?? 50),
+      0,
+    );
+    factors.assignments = {
+      label: "Vazifalar",
+      score: clamp(taskPoints / submissions.length),
+      weight: 25,
+    };
+  }
+  const graded = submissions.filter(
+    (item) => item.score != null && Number.isFinite(Number(item.score)),
+  );
+  if (graded.length) {
+    factors.mastery = {
+      label: "O‘zlashtirish",
+      score: clamp(
+        graded.reduce((total, item) => total + Number(item.score), 0) /
+          graded.length,
+      ),
+      weight: 40,
+    };
+  }
+  const totalWeight = Object.values(factors).reduce(
+    (total, factor) => total + factor.weight,
+    0,
+  );
+  if (!totalWeight)
+    return {
+      code: "NEW",
+      label: "Yangi",
+      score: null,
+      factors: {},
+    };
+  const score = clamp(
+      Object.values(factors).reduce(
+        (total, factor) => total + factor.score * factor.weight,
+        0,
+      ) / totalWeight,
+    ),
+    code =
+      score >= 90
+        ? "EXPERT"
+        : score >= 75
+          ? "ADVANCED"
+          : score >= 60
+            ? "ACTIVE"
+            : score >= 40
+              ? "DEVELOPING"
+              : "BEGINNER";
+  return {
+    code,
+    label: {
+      EXPERT: "Ekspert",
+      ADVANCED: "Ilg‘or",
+      ACTIVE: "Faol",
+      DEVELOPING: "Rivojlanmoqda",
+      BEGINNER: "Boshlang‘ich",
+    }[code],
+    score,
+    factors: Object.fromEntries(
+      Object.entries(factors).map(([key, factor]) => [
+        key,
+        {
+          ...factor,
+          weight: Math.round((factor.weight / totalWeight) * 100),
+        },
+      ]),
+    ),
+  };
+}

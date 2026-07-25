@@ -531,6 +531,63 @@
   border-radius: var(--radius-lg);
   background: linear-gradient(135deg, var(--surface), var(--surface-secondary));
 }
+.student-welcome-level {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+.student-level-badge {
+  width: max-content;
+  min-height: 28px;
+  padding: 5px 9px;
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.student-level-badge svg {
+  width: 14px;
+  height: 14px;
+}
+.student-level-badge strong {
+  font-size: inherit;
+}
+.student-level-badge small {
+  padding-left: 6px;
+  border-left: 1px solid currentColor;
+  color: inherit;
+  opacity: 0.8;
+}
+.level-expert {
+  color: #8b5cf6;
+  background: color-mix(in srgb, #8b5cf6 13%, transparent);
+}
+.level-advanced {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+.level-active {
+  color: #3b82f6;
+  background: color-mix(in srgb, #3b82f6 12%, transparent);
+}
+.level-developing {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 13%, transparent);
+}
+.level-beginner {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+.level-new {
+  color: var(--text-secondary);
+  background: var(--surface-secondary);
+}
 .student-stats {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }

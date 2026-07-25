@@ -27,6 +27,7 @@ import { ImportModal } from "../components/students/ImportModal";
 import { importExportService } from "../services/importExportService";
 import { hydrateDB, request } from "../services/storage";
 import { useConfirm } from "../components/ui/ConfirmDialog";
+import { StudentLevelBadge } from "../components/students/StudentLevelBadge";
 const matchesMastery = (score, mastery) => {
   if (mastery === "all") return true;
   if (mastery === "no_data") return score == null;
@@ -196,6 +197,8 @@ export function StudentsPage() {
           "Qo‘shilgan sana": student.joinedDate || "—",
           "Davomat (%)": analyticsService.studentAttendance(student.id),
           "O‘zlashtirish / Health Score (%)": insight?.health?.score ?? "—",
+          Daraja: insight?.level?.label || "Yangi",
+          "Daraja bali": insight?.level?.score ?? "—",
           "Risk holati": insight?.risk?.label || "—",
           "Risk sabablari":
             insight?.risk?.reasons?.map((reason) => reason.title).join("; ") || "—",
@@ -367,6 +370,7 @@ export function StudentsPage() {
                 <th>Qo‘shilgan</th>
                 <th>Davomat</th>
                 <th>O‘zlashtirish</th>
+                <th>Daraja</th>
                 <th>Vazifalar</th>
                 <th>To‘lov</th>
                 <th>Holati</th>
@@ -450,6 +454,9 @@ export function StudentsPage() {
                         <i style={{ "--w": `${insightScores[s.id]}%` }} />
                       </div>
                     )}
+                  </td>
+                  <td>
+                    <StudentLevelBadge level={studentInsights[s.id]?.level} />
                   </td>
                   <td>
                     <strong>

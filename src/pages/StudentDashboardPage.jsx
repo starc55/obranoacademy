@@ -19,6 +19,7 @@ import {
 } from "recharts";
 import { request } from "../services/storage";
 import { SubmissionModal } from "../components/students/SubmissionModal";
+import { StudentLevelBadge } from "../components/students/StudentLevelBadge";
 
 const statusLabel = {
   SUBMITTED: "Yuborildi",
@@ -74,7 +75,10 @@ export function StudentDashboardPage() {
     <>
       <div className="page-head student-welcome">
         <div>
-          <span className="eyebrow">SHAXSIY NATIJALAR</span>
+          <div className="student-welcome-level">
+            <span className="eyebrow">SHAXSIY NATIJALAR</span>
+            <StudentLevelBadge level={data.insights?.level} showScore />
+          </div>
           <h2>Salom, {data.profile.firstName}</h2>
           <p>
             Natijalaringiz, rivojlanish dinamikasi va so‘nggi vazifalaringiz.

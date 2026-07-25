@@ -12,7 +12,11 @@ import bcrypt from "bcryptjs";
 import rateLimit from "express-rate-limit";
 import multer from "multer";
 import { fileTypeFromBuffer } from "file-type";
-import { calculateHealth, detectRisk } from "./services/studentInsights.js";
+import {
+  calculateHealth,
+  calculateStudentLevel,
+  detectRisk,
+} from "./services/studentInsights.js";
 const requiredEnv = [
   "DATABASE_URL",
   "ADMIN_EMAIL",
@@ -403,12 +407,14 @@ app.delete("/api/students/:id", async (req, res, next) => {
   }
 });
 const loadStudentInsights = async (studentId) => {
-  const [attendance, events] = await Promise.all([
+  const [attendance, events, submissions] = await Promise.all([
     sql`select ar.status,s.session_date as date from attendance_records ar join attendance_sessions s on s.id=ar.session_id where ar.student_id=${studentId} and s.session_date>=current_date-30 order by s.session_date`,
     sql`select id,type,title,description,value,metadata,occurred_at from student_progress_events where student_id=${studentId} and occurred_at>=now()-interval '30 days' order by occurred_at`,
+    sql`select status,score,submitted_at from submissions where student_id=${studentId} and submitted_at>=now()-interval '30 days' order by submitted_at`,
   ]);
-  const health = calculateHealth({ attendance, events });
-  return { health, risk: detectRisk({ attendance, health }) };
+  const health = calculateHealth({ attendance, events }),
+    level = calculateStudentLevel({ attendance, submissions });
+  return { health, level, risk: detectRisk({ attendance, health }) };
 };
 app.get("/api/students/:id/insights", async (req, res, next) => {
   try {
@@ -1249,7 +1255,8 @@ app.get("/api/student", requireRole("STUDENT"), async (req, res, next) => {
     const [stats] = await sql`select count(*)::int total,count(*) filter(where status='UNDER_REVIEW')::int under_review,count(*) filter(where status='APPROVED')::int approved,count(*) filter(where status='REVISION_REQUESTED')::int revision_requested,round(avg(score) filter(where score is not null),1) average_score from submissions where student_id=${req.auth.sub}`;
     const recent = await sql`select s.*,exists(select 1 from submission_files f where f.submission_id=s.id) has_file,(select original_name from submission_files f where f.submission_id=s.id order by f.created_at limit 1) file_name from submissions s where student_id=${req.auth.sub} order by submitted_at desc limit 5`;
     const achievements = await sql`select * from achievements where student_id=${req.auth.sub} order by created_at desc`;
-    res.json({ profile: studentOut(student), stats: { ...stats, average_score: Number(stats.average_score || 0) }, recent: recent.map(submissionOut), achievements });
+    const insights = await loadStudentInsights(req.auth.sub);
+    res.json({ profile: studentOut(student), stats: { ...stats, average_score: Number(stats.average_score || 0) }, recent: recent.map(submissionOut), achievements, insights });
   } catch (e) { next(e); }
 });
 app.patch("/api/student/profile", requireRole("STUDENT"), async (req, res, next) => {
