@@ -17,6 +17,16 @@ import {
   calculateStudentLevel,
   detectRisk,
 } from "./services/studentInsights.js";
+import { migrateLessonPlans } from "./migrations/20260727_lesson_plans.js";
+import {
+  inferScheduleType,
+  lessonCompletionMetrics,
+  LESSON_ITEM_STATUSES,
+  SCHEDULE_TYPES,
+  SKILL_TYPES,
+  validateLessonItems,
+  weekdayFromDate,
+} from "./services/lessonPlans.js";
 const requiredEnv = [
   "DATABASE_URL",
   "ADMIN_EMAIL",
@@ -70,6 +80,7 @@ await sql.transaction([
   sql`update attendance_records set status=case status when 'present' then 'entered' when 'absent' then 'not_entered' else status end where status in ('present','absent')`,
   sql`alter table attendance_records add constraint attendance_records_status_check check(status in ('entered','not_entered','late','excused','left'))`,
 ]);
+await migrateLessonPlans(sql);
 await sql`update weekly_summaries set metrics=(metrics-'absent')||jsonb_build_object('notEntered',metrics->'absent') where metrics ? 'absent'`;
 await sql`create unique index if not exists payments_student_month_unique on payments(student_id,payment_month)`;
 const allowedOrigins = [
@@ -648,6 +659,727 @@ app.put("/api/attendance", async (req, res, next) => {
     next(e);
   }
 });
+
+const lessonReasonOut = (row) => ({
+  id: row.id,
+  code: row.code,
+  label: row.label,
+  isActive: row.is_active,
+  orderIndex: row.order_index,
+});
+const lessonItemOut = (row) => ({
+  id: row.id,
+  lessonSessionId: row.lesson_session_id,
+  templateItemId: row.template_item_id,
+  titleSnapshot: row.title_snapshot,
+  descriptionSnapshot: row.description_snapshot,
+  skillTypeSnapshot: row.skill_type_snapshot,
+  isRequired: row.is_required_snapshot,
+  carryOverEnabled: row.carry_over_enabled_snapshot,
+  status: row.status,
+  incompleteReasonId: row.incomplete_reason_id,
+  incompleteReasonSnapshot: row.incomplete_reason_snapshot,
+  customReason: row.custom_reason || "",
+  teacherNote: row.teacher_note || "",
+  carryOverToNext: row.carry_over_to_next,
+  sourceSessionItemId: row.source_session_item_id,
+  carryOverCount: Number(row.carry_over_count || 0),
+  completedAt: row.completed_at,
+  orderIndex: row.order_index,
+});
+const lessonSessionOut = (row, items = []) => ({
+  id: row.id,
+  attendanceSessionId: row.attendance_session_id,
+  groupId: row.group_id,
+  groupName: row.group_name,
+  templateId: row.template_id,
+  templateName: row.template_name,
+  lessonDate: dateOnly(row.lesson_date),
+  weekday: weekdayFromDate(dateOnly(row.lesson_date)),
+  teacher: row.teacher_snapshot,
+  scheduleType: row.schedule_type_snapshot,
+  attendanceCompletedAt: row.attendance_completed_at,
+  planCompletedAt: row.plan_completed_at,
+  status: row.status,
+  teacherNote: row.teacher_note || "",
+  items: items.map(lessonItemOut),
+  metrics: lessonCompletionMetrics(items.map(lessonItemOut)),
+});
+const loadLessonTemplates = async ({ activeOnly = false } = {}) => {
+  const [templates, days, items] = await Promise.all([
+    sql`select * from lesson_plan_templates
+      where (${activeOnly}::boolean=false or is_active=true)
+      order by is_default desc,created_at`,
+    sql`select * from lesson_plan_template_days order by weekday,order_index`,
+    sql`select * from lesson_plan_template_items order by order_index,created_at`,
+  ]);
+  return templates.map((template) => ({
+    id: template.id,
+    name: template.name,
+    scheduleType: template.schedule_type,
+    isActive: template.is_active,
+    isDefault: template.is_default,
+    createdAt: template.created_at,
+    days: days
+      .filter((day) => day.template_id === template.id)
+      .map((day) => ({
+        id: day.id,
+        weekday: day.weekday,
+        orderIndex: day.order_index,
+        items: items
+          .filter((item) => item.template_day_id === day.id)
+          .map((item) => ({
+            id: item.id,
+            title: item.title,
+            description: item.description,
+            skillType: item.skill_type,
+            orderIndex: item.order_index,
+            isRequired: item.is_required,
+            carryOverEnabled: item.carry_over_enabled,
+            isActive: item.is_active,
+          })),
+      })),
+  }));
+};
+const findLessonTemplate = async (group, lessonDate) => {
+  const [setting] = await sql`select s.*,t.name,t.schedule_type
+    from group_lesson_plan_settings s
+    join lesson_plan_templates t on t.id=s.template_id
+    where s.group_id=${group.id}
+      and s.effective_from<=${lessonDate}
+      and (s.effective_to is null or s.effective_to>=${lessonDate})
+      and t.is_active=true
+    order by s.effective_from desc limit 1`;
+  if (setting)
+    return {
+      id: setting.template_id,
+      name: setting.name,
+      scheduleType: setting.schedule_type,
+    };
+  const scheduleType = inferScheduleType(group.days),
+    [template] = await sql`select id,name,schedule_type from lesson_plan_templates
+      where schedule_type=${scheduleType} and is_default=true and is_active=true
+      limit 1`;
+  return template
+    ? {
+        id: template.id,
+        name: template.name,
+        scheduleType: template.schedule_type,
+      }
+    : { id: null, name: null, scheduleType };
+};
+const ensureLessonSession = async (attendanceSessionId) => {
+  const [attendance] = await sql`select a.*,g.name group_name,g.teacher,g.days
+    from attendance_sessions a
+    join groups g on g.id=a.group_id
+    where a.id=${attendanceSessionId} and a.session_type='group'`;
+  if (!attendance)
+    throw Object.assign(new Error("Guruh yo‘qlama sessiyasi topilmadi"), {
+      status: 404,
+    });
+  const [attendanceCount] = await sql`select count(*)::int total
+    from attendance_records where session_id=${attendance.id}`;
+  if (!attendanceCount.total)
+    throw Object.assign(new Error("Avval davomatni saqlang"), { status: 409 });
+  const lessonDate = dateOnly(attendance.session_date),
+    template = await findLessonTemplate(
+      {
+        id: attendance.group_id,
+        days: attendance.days,
+      },
+      lessonDate,
+    ),
+    [session] = await sql`insert into lesson_sessions(
+      group_id,attendance_session_id,template_id,lesson_date,teacher_snapshot,
+      schedule_type_snapshot,attendance_completed_at
+    ) values(
+      ${attendance.group_id},${attendance.id},${template.id},${lessonDate},
+      ${attendance.teacher || ""},${template.scheduleType},now()
+    ) on conflict(group_id,lesson_date) do update set
+      attendance_completed_at=coalesce(lesson_sessions.attendance_completed_at,excluded.attendance_completed_at),
+      updated_at=now()
+    returning *`;
+  const [itemCount] = await sql`select count(*)::int total
+    from lesson_session_items where lesson_session_id=${session.id}`;
+  if (!itemCount.total) {
+    const weekday = weekdayFromDate(lessonDate),
+      templateItems = template.id
+        ? await sql`select i.* from lesson_plan_template_items i
+            join lesson_plan_template_days d on d.id=i.template_day_id
+            where d.template_id=${template.id} and d.weekday=${weekday}
+              and i.is_active=true
+            order by i.order_index`
+        : [],
+      pendingCarry = await sql`select i.* from lesson_session_items i
+        join lesson_sessions s on s.id=i.lesson_session_id
+        where s.group_id=${attendance.group_id}
+          and s.lesson_date<${lessonDate}
+          and i.carry_over_to_next=true
+          and i.status in ('PARTIAL','NOT_COMPLETED')
+          and not exists(
+            select 1 from lesson_session_items child
+            where child.source_session_item_id=i.id
+          )
+        order by s.lesson_date,i.order_index`,
+      snapshotQueries = [
+        ...templateItems.map(
+          (item) =>
+            sql`insert into lesson_session_items(
+              lesson_session_id,template_item_id,title_snapshot,description_snapshot,
+              skill_type_snapshot,is_required_snapshot,carry_over_enabled_snapshot,order_index
+            ) values(
+              ${session.id},${item.id},${item.title},${item.description},
+              ${item.skill_type},${item.is_required},${item.carry_over_enabled},
+              ${item.order_index}
+            ) on conflict(lesson_session_id,template_item_id)
+              where template_item_id is not null do nothing`,
+        ),
+        ...pendingCarry.map(
+          (item, index) =>
+            sql`insert into lesson_session_items(
+              lesson_session_id,title_snapshot,description_snapshot,skill_type_snapshot,
+              is_required_snapshot,carry_over_enabled_snapshot,incomplete_reason_snapshot,
+              source_session_item_id,carry_over_count,order_index
+            ) values(
+              ${session.id},${item.title_snapshot},${item.description_snapshot},
+              ${item.skill_type_snapshot},true,${item.carry_over_enabled_snapshot},
+              ${item.incomplete_reason_snapshot},${item.id},
+              ${Number(item.carry_over_count || 0) + 1},${-1000 + index}
+            ) on conflict(source_session_item_id)
+              where source_session_item_id is not null do nothing`,
+        ),
+      ];
+    if (snapshotQueries.length) await sql.transaction(snapshotQueries);
+  }
+  const [fullSession] = await sql`select s.*,g.name group_name,t.name template_name
+    from lesson_sessions s
+    join groups g on g.id=s.group_id
+    left join lesson_plan_templates t on t.id=s.template_id
+    where s.id=${session.id}`;
+  const sessionItems = await sql`select * from lesson_session_items
+    where lesson_session_id=${session.id}
+    order by order_index,created_at`;
+  return lessonSessionOut(fullSession, sessionItems);
+};
+
+app.get(
+  "/api/lesson-sessions/:attendanceSessionId/plan",
+  requireRole("ADMIN"),
+  async (req, res, next) => {
+    try {
+      const session = await ensureLessonSession(
+        req.params.attendanceSessionId,
+      );
+      const reasons = await sql`select * from lesson_incomplete_reasons
+        where is_active=true order by order_index,label`;
+      res.json({ ...session, reasons: reasons.map(lessonReasonOut) });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+app.patch(
+  "/api/lesson-session-items/:itemId",
+  requireRole("ADMIN"),
+  async (req, res, next) => {
+    try {
+      const [current] = await sql`select i.*,s.status session_status
+        from lesson_session_items i
+        join lesson_sessions s on s.id=i.lesson_session_id
+        where i.id=${req.params.itemId}`;
+      if (!current)
+        return res.status(404).json({ error: "Reja bandi topilmadi" });
+      if (current.session_status === "COMPLETED")
+        return res
+          .status(409)
+          .json({ error: "Yakunlangan darsni avval qayta oching" });
+      const status = req.body.status || null,
+        reasonId = req.body.incompleteReasonId || null,
+        customReason = String(req.body.customReason || "").trim(),
+        teacherNote = String(req.body.teacherNote || "").trim(),
+        carryOverToNext = Boolean(req.body.carryOverToNext);
+      if (status && !LESSON_ITEM_STATUSES.includes(status))
+        return res.status(400).json({ error: "Status noto‘g‘ri" });
+      const [reason] = reasonId
+        ? await sql`select * from lesson_incomplete_reasons where id=${reasonId}`
+        : [];
+      const validationItem = {
+        titleSnapshot: current.title_snapshot,
+        isRequired: current.is_required_snapshot,
+        carryOverEnabled: current.carry_over_enabled_snapshot,
+        status,
+        incompleteReasonId: reasonId,
+        customReason,
+        carryOverToNext,
+      };
+      const errors = validateLessonItems(
+        [validationItem],
+        new Map(reason ? [[reason.id, reason]] : []),
+      );
+      if (errors.length)
+        return res.status(400).json({ error: errors[0], errors });
+      const needsReason = ["PARTIAL", "NOT_COMPLETED"].includes(status),
+        keepCarry = needsReason && carryOverToNext,
+        [row] = await sql`update lesson_session_items set
+          status=${status},
+          incomplete_reason_id=${needsReason ? reasonId : null},
+          incomplete_reason_snapshot=${needsReason ? reason?.label || null : null},
+          custom_reason=${needsReason ? customReason || null : null},
+          teacher_note=${teacherNote},
+          carry_over_to_next=${keepCarry},
+          completed_at=${status === "COMPLETED" ? new Date().toISOString() : null},
+          updated_at=now()
+          where id=${current.id}
+          returning *`;
+      await sql`insert into lesson_plan_audit_logs(
+        lesson_session_id,session_item_id,action,changed_by_id,old_value,new_value
+      ) values(
+        ${current.lesson_session_id},${current.id},'ITEM_UPDATED',${req.auth.sub},
+        ${JSON.stringify(lessonItemOut(current))}::jsonb,
+        ${JSON.stringify(lessonItemOut(row))}::jsonb
+      )`;
+      res.json(lessonItemOut(row));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+app.post(
+  "/api/lesson-sessions/:sessionId/items",
+  requireRole("ADMIN"),
+  async (req, res, next) => {
+    try {
+      const title = String(req.body.title || "").trim(),
+        skillType = String(req.body.skillType || "OTHER").toUpperCase();
+      if (title.length < 2 || !SKILL_TYPES.includes(skillType))
+        return res.status(400).json({ error: "Reja bandi noto‘g‘ri" });
+      const [session] = await sql`select * from lesson_sessions where id=${req.params.sessionId}`;
+      if (!session) return res.status(404).json({ error: "Dars topilmadi" });
+      if (session.status === "COMPLETED")
+        return res.status(409).json({ error: "Dars yakunlangan" });
+      const [row] = await sql`insert into lesson_session_items(
+        lesson_session_id,title_snapshot,description_snapshot,skill_type_snapshot,
+        is_required_snapshot,carry_over_enabled_snapshot,order_index
+      ) values(
+        ${session.id},${title},${String(req.body.description || "").trim()},
+        ${skillType},${req.body.isRequired !== false},
+        ${req.body.carryOverEnabled !== false},999
+      ) returning *`;
+      res.status(201).json(lessonItemOut(row));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+app.post(
+  "/api/lesson-sessions/:sessionId/complete-plan",
+  requireRole("ADMIN"),
+  async (req, res, next) => {
+    try {
+      const [session] = await sql`select * from lesson_sessions
+        where id=${req.params.sessionId}`;
+      if (!session) return res.status(404).json({ error: "Dars topilmadi" });
+      if (session.status === "COMPLETED")
+        return res.json({ ...lessonSessionOut(session), idempotent: true });
+      const [attendanceCount, items, reasons] = await Promise.all([
+        sql`select count(*)::int total from attendance_records
+          where session_id=${session.attendance_session_id}`,
+        sql`select * from lesson_session_items
+          where lesson_session_id=${session.id} order by order_index`,
+        sql`select * from lesson_incomplete_reasons`,
+      ]);
+      if (!attendanceCount[0].total)
+        return res.status(409).json({ error: "Avval davomatni saqlang" });
+      if (!items.length)
+        return res
+          .status(409)
+          .json({ error: "Bugungi dars uchun reja topilmadi" });
+      const reasonMap = new Map(reasons.map((reason) => [reason.id, reason])),
+        errors = validateLessonItems(items.map(lessonItemOut), reasonMap);
+      if (errors.length)
+        return res.status(400).json({ error: errors[0], errors });
+      const teacherNote = String(req.body.teacherNote || "").trim(),
+        [results] = await sql.transaction([
+          sql`update lesson_sessions set
+            status='COMPLETED',teacher_note=${teacherNote},
+            plan_completed_at=now(),updated_at=now()
+            where id=${session.id} and status<>'COMPLETED'
+            returning *`,
+          sql`insert into lesson_plan_audit_logs(
+            lesson_session_id,action,changed_by_id,old_value,new_value
+          ) values(
+            ${session.id},'PLAN_COMPLETED',${req.auth.sub},
+            ${JSON.stringify({ status: session.status })}::jsonb,
+            ${JSON.stringify({ status: "COMPLETED", teacherNote })}::jsonb
+          )`,
+        ]);
+      const updated = results[0] || session;
+      res.json(lessonSessionOut(updated, items));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+app.post(
+  "/api/lesson-sessions/:sessionId/reopen-plan",
+  requireRole("ADMIN"),
+  async (req, res, next) => {
+    try {
+      const reason = String(req.body.reason || "").trim();
+      if (reason.length < 3)
+        return res.status(400).json({ error: "Qayta ochish sababini yozing" });
+      const [row] = await sql`update lesson_sessions set
+        status='REOPENED',plan_completed_at=null,updated_at=now()
+        where id=${req.params.sessionId} returning *`;
+      if (!row) return res.status(404).json({ error: "Dars topilmadi" });
+      await sql`insert into lesson_plan_audit_logs(
+        lesson_session_id,action,changed_by_id,new_value,reason
+      ) values(
+        ${row.id},'PLAN_REOPENED',${req.auth.sub},
+        ${JSON.stringify({ status: "REOPENED" })}::jsonb,${reason}
+      )`;
+      res.json(lessonSessionOut(row));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+app.get(
+  "/api/admin/lesson-plan-templates",
+  requireRole("ADMIN"),
+  async (_req, res, next) => {
+    try {
+      res.json(await loadLessonTemplates());
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+app.post(
+  "/api/admin/lesson-plan-templates",
+  requireRole("ADMIN"),
+  async (req, res, next) => {
+    try {
+      const name = String(req.body.name || "").trim(),
+        scheduleType = String(req.body.scheduleType || "").toUpperCase();
+      if (name.length < 3 || !SCHEDULE_TYPES.includes(scheduleType))
+        return res.status(400).json({ error: "Template ma’lumoti noto‘g‘ri" });
+      const [row] = await sql`insert into lesson_plan_templates(
+        name,schedule_type,is_active,is_default,created_by
+      ) values(${name},${scheduleType},true,false,${req.auth.sub}) returning *`;
+      res.status(201).json({
+        id: row.id,
+        name: row.name,
+        scheduleType: row.schedule_type,
+        isActive: row.is_active,
+        days: [],
+      });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+app.patch(
+  "/api/admin/lesson-plan-templates/:id",
+  requireRole("ADMIN"),
+  async (req, res, next) => {
+    try {
+      const scheduleType = req.body.scheduleType
+        ? String(req.body.scheduleType).toUpperCase()
+        : null;
+      if (scheduleType && !SCHEDULE_TYPES.includes(scheduleType))
+        return res.status(400).json({ error: "Schedule turi noto‘g‘ri" });
+      const [row] = await sql`update lesson_plan_templates set
+        name=coalesce(${String(req.body.name || "").trim() || null},name),
+        schedule_type=coalesce(${scheduleType},schedule_type),
+        is_active=coalesce(${req.body.isActive ?? null},is_active),
+        updated_at=now()
+        where id=${req.params.id} returning *`;
+      if (!row) return res.status(404).json({ error: "Template topilmadi" });
+      res.json(row);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+app.post(
+  "/api/admin/lesson-plan-templates/:id/items",
+  requireRole("ADMIN"),
+  async (req, res, next) => {
+    try {
+      const weekday = Number(req.body.weekday),
+        title = String(req.body.title || "").trim(),
+        skillType = String(req.body.skillType || "OTHER").toUpperCase();
+      if (
+        weekday < 1 ||
+        weekday > 7 ||
+        title.length < 2 ||
+        !SKILL_TYPES.includes(skillType)
+      )
+        return res.status(400).json({ error: "Reja bandi noto‘g‘ri" });
+      const [template] = await sql`select id from lesson_plan_templates
+        where id=${req.params.id}`;
+      if (!template)
+        return res.status(404).json({ error: "Template topilmadi" });
+      const [day] = await sql`insert into lesson_plan_template_days(
+        template_id,weekday,order_index
+      ) values(${template.id},${weekday},${weekday})
+      on conflict(template_id,weekday) do update set updated_at=now()
+      returning *`;
+      const [max] = await sql`select coalesce(max(order_index),-1)::int value
+        from lesson_plan_template_items where template_day_id=${day.id}`;
+      const [row] = await sql`insert into lesson_plan_template_items(
+        template_day_id,title,skill_type,description,order_index,
+        is_required,carry_over_enabled,is_active
+      ) values(
+        ${day.id},${title},${skillType},
+        ${String(req.body.description || "").trim()},${max.value + 1},
+        ${req.body.isRequired !== false},${req.body.carryOverEnabled !== false},true
+      ) returning *`;
+      res.status(201).json(row);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+app.patch(
+  "/api/admin/lesson-plan-items/:id",
+  requireRole("ADMIN"),
+  async (req, res, next) => {
+    try {
+      const skillType = req.body.skillType
+        ? String(req.body.skillType).toUpperCase()
+        : null;
+      if (skillType && !SKILL_TYPES.includes(skillType))
+        return res.status(400).json({ error: "Skill turi noto‘g‘ri" });
+      const [row] = await sql`update lesson_plan_template_items set
+        title=coalesce(${String(req.body.title || "").trim() || null},title),
+        description=coalesce(${req.body.description ?? null},description),
+        skill_type=coalesce(${skillType},skill_type),
+        order_index=coalesce(${req.body.orderIndex ?? null},order_index),
+        is_required=coalesce(${req.body.isRequired ?? null},is_required),
+        carry_over_enabled=coalesce(${req.body.carryOverEnabled ?? null},carry_over_enabled),
+        is_active=coalesce(${req.body.isActive ?? null},is_active),
+        updated_at=now()
+        where id=${req.params.id} returning *`;
+      if (!row) return res.status(404).json({ error: "Reja bandi topilmadi" });
+      res.json(row);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+app.get(
+  "/api/lesson-incomplete-reasons",
+  requireRole("ADMIN"),
+  async (_req, res, next) => {
+    try {
+      const rows = await sql`select * from lesson_incomplete_reasons
+        order by order_index,label`;
+      res.json(rows.map(lessonReasonOut));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+app.post(
+  "/api/admin/lesson-incomplete-reasons",
+  requireRole("ADMIN"),
+  async (req, res, next) => {
+    try {
+      const label = String(req.body.label || "").trim();
+      if (label.length < 3)
+        return res.status(400).json({ error: "Sabab nomini kiriting" });
+      const code =
+        String(req.body.code || label)
+          .trim()
+          .toUpperCase()
+          .replace(/[^A-Z0-9]+/g, "_")
+          .slice(0, 60) || `REASON_${Date.now()}`;
+      const [max] = await sql`select coalesce(max(order_index),-1)::int value
+        from lesson_incomplete_reasons`;
+      const [row] = await sql`insert into lesson_incomplete_reasons(
+        code,label,order_index
+      ) values(${code},${label},${max.value + 1}) returning *`;
+      res.status(201).json(lessonReasonOut(row));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+app.patch(
+  "/api/admin/lesson-incomplete-reasons/:id",
+  requireRole("ADMIN"),
+  async (req, res, next) => {
+    try {
+      const [row] = await sql`update lesson_incomplete_reasons set
+        label=coalesce(${String(req.body.label || "").trim() || null},label),
+        is_active=coalesce(${req.body.isActive ?? null},is_active),
+        order_index=coalesce(${req.body.orderIndex ?? null},order_index),
+        updated_at=now()
+        where id=${req.params.id} returning *`;
+      if (!row) return res.status(404).json({ error: "Sabab topilmadi" });
+      res.json(lessonReasonOut(row));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+app.get(
+  "/api/groups/:groupId/lesson-plan",
+  requireRole("ADMIN"),
+  async (req, res, next) => {
+    try {
+      const [group] = await sql`select * from groups where id=${req.params.groupId}`;
+      if (!group) return res.status(404).json({ error: "Guruh topilmadi" });
+      const settings = await sql`select s.*,t.name template_name,t.schedule_type
+        from group_lesson_plan_settings s
+        join lesson_plan_templates t on t.id=s.template_id
+        where s.group_id=${group.id}
+        order by s.effective_from desc`;
+      const current = await findLessonTemplate(group, dateOnly(new Date()));
+      res.json({
+        scheduleType: inferScheduleType(group.days),
+        currentTemplate: current,
+        settings: settings.map((setting) => ({
+          id: setting.id,
+          templateId: setting.template_id,
+          templateName: setting.template_name,
+          scheduleType: setting.schedule_type,
+          effectiveFrom: dateOnly(setting.effective_from),
+          effectiveTo: dateOnly(setting.effective_to),
+        })),
+        templates: await loadLessonTemplates({ activeOnly: true }),
+      });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+app.patch(
+  "/api/groups/:groupId/lesson-plan",
+  requireRole("ADMIN"),
+  async (req, res, next) => {
+    try {
+      const templateId = req.body.templateId,
+        effectiveFrom = req.body.effectiveFrom || dateOnly(new Date()),
+        effectiveTo = req.body.effectiveTo || null;
+      const [group, template] = await Promise.all([
+        sql`select id from groups where id=${req.params.groupId}`,
+        sql`select id from lesson_plan_templates where id=${templateId} and is_active=true`,
+      ]);
+      if (!group[0] || !template[0])
+        return res.status(404).json({ error: "Guruh yoki template topilmadi" });
+      if (effectiveTo && effectiveTo < effectiveFrom)
+        return res.status(400).json({ error: "Effective sana noto‘g‘ri" });
+      const [row] = await sql`insert into group_lesson_plan_settings(
+        group_id,template_id,effective_from,effective_to
+      ) values(
+        ${req.params.groupId},${templateId},${effectiveFrom},${effectiveTo}
+      ) returning *`;
+      res.json({
+        id: row.id,
+        templateId: row.template_id,
+        effectiveFrom: dateOnly(row.effective_from),
+        effectiveTo: dateOnly(row.effective_to),
+      });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+app.get(
+  "/api/admin/reports/lesson-plan-completion",
+  requireRole("ADMIN"),
+  async (req, res, next) => {
+    try {
+      const from = req.query.from || null,
+        to = req.query.to || null,
+        groupId = req.query.groupId || null,
+        teacher = req.query.teacher || null,
+        status = req.query.status || null,
+        scheduleType = req.query.scheduleType || null,
+        carryOnly = req.query.carryOnly === "true",
+        sessions = await sql`select s.*,g.name group_name,t.name template_name
+          from lesson_sessions s
+          join groups g on g.id=s.group_id
+          left join lesson_plan_templates t on t.id=s.template_id
+          where (${from}::date is null or s.lesson_date>=${from}::date)
+            and (${to}::date is null or s.lesson_date<=${to}::date)
+            and (${groupId}::uuid is null or s.group_id=${groupId}::uuid)
+            and (${teacher}::text is null or s.teacher_snapshot=${teacher})
+            and (${status}::text is null or s.status=${status})
+            and (${scheduleType}::text is null or s.schedule_type_snapshot=${scheduleType})
+          order by s.lesson_date desc`,
+        sessionIds = sessions.map((session) => session.id),
+        items = sessionIds.length
+          ? await sql`select * from lesson_session_items
+              where lesson_session_id=any(${sessionIds}::uuid[])`
+          : [],
+        rows = sessions
+          .map((session) => {
+            const sessionItems = items.filter(
+              (item) => item.lesson_session_id === session.id,
+            );
+            return lessonSessionOut(session, sessionItems);
+          })
+          .filter((session) => !carryOnly || session.metrics.carried > 0),
+        allItems = rows.flatMap((row) => row.items),
+        completedRows = rows.filter((row) => row.status === "COMPLETED"),
+        averageCompletion = completedRows.length
+          ? Math.round(
+              completedRows.reduce(
+                (total, row) => total + row.metrics.percent,
+                0,
+              ) / completedRows.length,
+            )
+          : 0,
+        frequency = (key, filter = () => true) =>
+          Object.entries(
+            allItems.filter(filter).reduce((result, item) => {
+              const value = item[key] || "Belgilanmagan";
+              result[value] = (result[value] || 0) + 1;
+              return result;
+            }, {}),
+          ).sort((a, b) => b[1] - a[1]);
+      res.json({
+        summary: {
+          totalLessons: rows.length,
+          completedPlans: completedRows.length,
+          partialItems: allItems.filter((item) => item.status === "PARTIAL").length,
+          notCompletedItems: allItems.filter(
+            (item) => item.status === "NOT_COMPLETED",
+          ).length,
+          carriedItems: allItems.filter((item) => item.carryOverToNext).length,
+          unfinishedLessons: rows.filter((row) => row.status !== "COMPLETED").length,
+          averageCompletion,
+        },
+        analytics: {
+          mostIncompleteSkills: frequency(
+            "skillTypeSnapshot",
+            (item) => item.status === "NOT_COMPLETED",
+          ).slice(0, 5),
+          mostPartialSkills: frequency(
+            "skillTypeSnapshot",
+            (item) => item.status === "PARTIAL",
+          ).slice(0, 5),
+          topReasons: frequency(
+            "incompleteReasonSnapshot",
+            (item) => ["PARTIAL", "NOT_COMPLETED"].includes(item.status),
+          ).slice(0, 5),
+          topCarryTasks: frequency(
+            "titleSnapshot",
+            (item) => item.carryOverToNext,
+          ).slice(0, 5),
+        },
+        rows,
+      });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
 app.put("/api/settings", async (req, res, next) => {
   try {
     const data = JSON.stringify(req.body);

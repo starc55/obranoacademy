@@ -21,6 +21,7 @@ import {
   Command,
   LogOut,
   UserRound,
+  BookOpenCheck,
 } from "lucide-react";
 import { useApp } from "../../context/AppContext";
 import { Modal } from "../ui/Modal";
@@ -35,6 +36,8 @@ const nav = [
   ["/groups", "Guruhlar", Layers3],
   ["/individuals", "Individuallar", UserRound],
   ["/attendance", "Yo‘qlama", ClipboardCheck],
+  ["/lesson-plans", "Dars rejalari", BookOpenCheck],
+  ["/lesson-plan-report", "Dars rejasi hisoboti", BarChart3],
   ["/payments", "To‘lovlar", CreditCard],
   ["/reports", "Hisobotlar", BarChart3],
   ["/alerts", "Smart Alerts", BellRing],

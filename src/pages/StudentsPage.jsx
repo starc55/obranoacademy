@@ -344,7 +344,7 @@ export function StudentsPage() {
             </div>
           )}
         </div>
-        <div className="table-wrap">
+        <div className="table-wrap students-table-wrap">
           <table>
             <thead>
               <tr>

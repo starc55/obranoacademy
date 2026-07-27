@@ -6,15 +6,28 @@ import {
   CalendarDays,
   Phone,
 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { analyticsService } from "../services/analyticsService";
 import { StatusBadge } from "../components/shared/StatusBadge";
+import { AppSelect, DatePicker } from "../components/ui/controls";
+import { request } from "../services/storage";
 export function GroupDetailsPage() {
   const { id } = useParams(),
     nav = useNavigate(),
     { groups, students, attendance, payments } = useApp(),
-    group = groups.find((g) => g.id === id);
+    group = groups.find((g) => g.id === id),
+    [planSettings, setPlanSettings] = useState(null),
+    [templateId, setTemplateId] = useState(""),
+    [effectiveFrom, setEffectiveFrom] = useState(new Date().toISOString().slice(0, 10)),
+    [effectiveTo, setEffectiveTo] = useState("");
+  const loadPlan = useCallback(() => request(`/api/groups/${id}/lesson-plan`).then((data) => {
+    setPlanSettings(data);
+    setTemplateId(data.currentTemplate?.id || data.templates?.[0]?.id || "");
+  }).catch(() => setPlanSettings(null)), [id]);
+  useEffect(() => { loadPlan(); }, [loadPlan]);
   if (!group)
     return (
       <div className="empty">
@@ -64,6 +77,17 @@ export function GroupDetailsPage() {
           <span>real to‘lovlar</span>
         </article>
       </div>
+      {planSettings && <section className="panel group-plan-setting">
+        <header><div><h3>Dars rejasi template’i</h3><p>Hozir: {planSettings.currentTemplate?.name || "Belgilanmagan"} · {planSettings.scheduleType}</p></div></header>
+        <div className="group-plan-form"><label>Template<AppSelect value={templateId} onValueChange={setTemplateId}>
+          {planSettings.templates.map((template) => <option value={template.id} key={template.id}>{template.name}</option>)}
+        </AppSelect></label><label>Amal qilish sanasi<DatePicker value={effectiveFrom} onValueChange={setEffectiveFrom} /></label>
+          <label>Tugash sanasi (ixtiyoriy)<DatePicker value={effectiveTo} onValueChange={setEffectiveTo} /></label>
+          <button className="btn btn--primary" onClick={async () => {
+            await request(`/api/groups/${id}/lesson-plan`, { method: "PATCH", body: JSON.stringify({ templateId, effectiveFrom, effectiveTo: effectiveTo || null }) });
+            toast.success("Guruh dars rejasi yangilandi"); await loadPlan();
+          }}>Saqlash</button></div>
+      </section>}
       <div className="group-detail-grid">
         <section className="table-card">
           <header className="section-head">

@@ -19,6 +19,8 @@ const Login = page("LoginPage"),
   Attendance = page("AttendancePage"),
   Payments = page("PaymentsPage"),
   Reports = page("ReportsPage"),
+  LessonPlans = page("LessonPlansPage"),
+  LessonPlanReport = page("LessonPlanReportPage"),
   Alerts = page("AlertsPage"),
   Settings = page("SettingsPage"),
   AdminSubmissions = page("AdminSubmissionsPage"),
@@ -59,6 +61,8 @@ function ProtectedApp({ authenticated, role }) {
           <Route path="/attendance" element={<Attendance />} />
           <Route path="/payments" element={<Payments />} />
           <Route path="/reports" element={<Reports />} />
+          <Route path="/lesson-plans" element={<LessonPlans />} />
+          <Route path="/lesson-plan-report" element={<LessonPlanReport />} />
           <Route path="/weekly-summary" element={<Navigate to="/reports" replace />} />
           <Route path="/alerts" element={<Alerts />} />
           <Route path="/submissions" element={<AdminSubmissions />} />

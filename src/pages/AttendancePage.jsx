@@ -16,6 +16,8 @@ import { AppSelect, DatePicker, TimePicker } from "../components/ui/controls";
 import { useApp } from "../context/AppContext";
 import { attendanceService } from "../services/attendanceService";
 import { StatusBadge } from "../components/shared/StatusBadge";
+import { LessonPlanPanel } from "../components/attendance/LessonPlanPanel";
+import { request } from "../services/storage";
 import { isGroupScheduled, weekdayOf } from "../utils/schedule";
 const statuses = [
   ["entered", "Kirdi", Check],
@@ -33,6 +35,8 @@ export function AttendancePage() {
     [lessonTimes, setLessonTimes] = useState({}),
     [focus, setFocus] = useState(0),
     [saving, setSaving] = useState(false),
+    [lessonPlan, setLessonPlan] = useState(null),
+    [planLoading, setPlanLoading] = useState(false),
     individuals = students.filter(
       (s) => s.enrollmentType === "individual" && s.status === "active",
     ),
@@ -89,7 +93,24 @@ export function AttendancePage() {
         }),
       ),
     );
+    const groupSession = mode === "group" ? sessions[0] : null;
+    setLessonPlan(null);
+    if (groupSession?.id && groupSession.records?.length) {
+      setPlanLoading(true);
+      request(`/api/lesson-sessions/${groupSession.id}/plan`)
+        .then(setLessonPlan)
+        .catch(() => setLessonPlan(null))
+        .finally(() => setPlanLoading(false));
+    }
   }, [date, groupId, mode, students]);
+  const reloadLessonPlan = async (optimisticPlan) => {
+    if (optimisticPlan) {
+      setLessonPlan(optimisticPlan);
+      return;
+    }
+    if (!lessonPlan?.attendanceSessionId) return;
+    setLessonPlan(await request(`/api/lesson-sessions/${lessonPlan.attendanceSessionId}/plan`));
+  };
   useEffect(() => {
     const key = (e) => {
       if (["1", "2", "3", "4", "5"].includes(e.key) && list[focus])
@@ -138,7 +159,15 @@ export function AttendancePage() {
               },
             ];
       try {
-        await attendanceService.saveMany(sessions);
+        const saved = await attendanceService.saveMany(sessions);
+        if (mode === "group" && saved[0]?.id && saved[0]?.records?.length) {
+          setPlanLoading(true);
+          try {
+            setLessonPlan(await request(`/api/lesson-sessions/${saved[0].id}/plan`));
+          } finally {
+            setPlanLoading(false);
+          }
+        }
         toast.success(
           mode === "individual"
             ? "Individual yo‘qlama saqlandi"
@@ -287,6 +316,9 @@ export function AttendancePage() {
           )}
         </div>
       </section>
+      {mode === "group" && (
+        <LessonPlanPanel plan={lessonPlan} loading={planLoading} onReload={reloadLessonPlan} />
+      )}
     </>
   );
 }

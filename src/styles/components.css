@@ -316,6 +316,15 @@
 .table-wrap {
   overflow: auto;
 }
+.students-table-wrap {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.students-table-wrap::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
 table {
   width: 100%;
   border-collapse: collapse;
