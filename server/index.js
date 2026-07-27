@@ -330,6 +330,11 @@ app.post("/api/students", async (req, res, next) => {
       temporaryPasswordHash = await bcrypt.hash(temporaryPassword, 12);
     if (!/^[a-z0-9._-]{3,32}$/.test(nickname))
       return res.status(400).json({ error: "Nickname 3–32 belgi: harf, raqam, nuqta, _ yoki -" });
+    if (
+      (s.enrollmentType || "group") === "individual" &&
+      (!Array.isArray(s.scheduleDays) || s.scheduleDays.length < 2 || s.scheduleDays.length > 3)
+    )
+      return res.status(400).json({ error: "Individual o‘quvchi uchun 2 yoki 3 ta dars kunini tanlang" });
     const [row] =
       await sql`insert into students(id,first_name,last_name,nickname,temporary_password_hash,account_status,phone,parent_phone,group_id,enrollment_type,schedule_days,lesson_time,monthly_fee,joined_date,birth_date,note,avatar_url,status) values(${
         s.id
@@ -373,6 +378,11 @@ app.patch("/api/students/:id", async (req, res, next) => {
       newTemporaryPasswordHash = newTemporaryPassword
         ? await bcrypt.hash(newTemporaryPassword, 12)
         : null;
+    if (
+      s.enrollmentType === "individual" &&
+      (!Array.isArray(s.scheduleDays) || s.scheduleDays.length < 2 || s.scheduleDays.length > 3)
+    )
+      return res.status(400).json({ error: "Individual o‘quvchi uchun 2 yoki 3 ta dars kunini tanlang" });
     if (newTemporaryPassword) {
       const [account] = await sql`select account_status from students where id=${req.params.id}`;
       if (!account) return res.status(404).json({ error: "Student topilmadi" });
@@ -708,10 +718,10 @@ const lessonSessionOut = (row, items = []) => ({
 const loadLessonTemplates = async ({ activeOnly = false } = {}) => {
   const [templates, days, items] = await Promise.all([
     sql`select * from lesson_plan_templates
-      where (${activeOnly}::boolean=false or is_active=true)
+      where deleted_at is null and (${activeOnly}::boolean=false or is_active=true)
       order by is_default desc,created_at`,
     sql`select * from lesson_plan_template_days order by weekday,order_index`,
-    sql`select * from lesson_plan_template_items order by order_index,created_at`,
+    sql`select * from lesson_plan_template_items where deleted_at is null order by order_index,created_at`,
   ]);
   return templates.map((template) => ({
     id: template.id,
@@ -1103,6 +1113,23 @@ app.patch(
     }
   },
 );
+app.delete(
+  "/api/admin/lesson-plan-templates/:id",
+  requireRole("ADMIN"),
+  async (req, res, next) => {
+    try {
+      const [current] = await sql`select * from lesson_plan_templates where id=${req.params.id}`;
+      if (!current) return res.status(404).json({ error: "Template topilmadi" });
+      if (current.is_default)
+        return res.status(409).json({ error: "Standart templateni o‘chirib bo‘lmaydi, faqat tahrirlang" });
+      const [row] = await sql`update lesson_plan_templates
+        set is_active=false,deleted_at=now(),updated_at=now() where id=${current.id} returning *`;
+      res.json({ id: row.id, isActive: row.is_active });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
 app.post(
   "/api/admin/lesson-plan-templates/:id/items",
   requireRole("ADMIN"),
@@ -1165,6 +1192,20 @@ app.patch(
         where id=${req.params.id} returning *`;
       if (!row) return res.status(404).json({ error: "Reja bandi topilmadi" });
       res.json(row);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+app.delete(
+  "/api/admin/lesson-plan-items/:id",
+  requireRole("ADMIN"),
+  async (req, res, next) => {
+    try {
+      const [row] = await sql`update lesson_plan_template_items
+        set is_active=false,deleted_at=now(),updated_at=now() where id=${req.params.id} returning *`;
+      if (!row) return res.status(404).json({ error: "Reja bandi topilmadi" });
+      res.json({ id: row.id, isActive: row.is_active });
     } catch (e) {
       next(e);
     }

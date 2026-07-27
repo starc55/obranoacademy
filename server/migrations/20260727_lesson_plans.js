@@ -119,6 +119,8 @@ export async function migrateLessonPlans(sql) {
     reason text,
     created_at timestamptz not null default now()
   )`;
+  await sql`alter table lesson_plan_templates add column if not exists deleted_at timestamptz`;
+  await sql`alter table lesson_plan_template_items add column if not exists deleted_at timestamptz`;
 
   for (const [index, [code, label]] of DEFAULT_REASONS.entries())
     await sql`insert into lesson_incomplete_reasons(code,label,order_index)

@@ -1,0 +1,305 @@
+/* Dars rejalari va loyiha modallari uchun yakuniy responsive qatlam */
+.lesson-plan-panel,
+.lesson-admin-grid,
+.lesson-template-detail,
+.lesson-day {
+  min-width: 0;
+}
+.lesson-plan-panel {
+  width: 100%;
+}
+.lesson-plan-item__main,
+.lesson-plan-footer {
+  min-width: 0;
+}
+.lesson-day > div {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.lesson-day > div strong {
+  overflow-wrap: anywhere;
+}
+.lesson-item-actions {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.lesson-item-actions .icon-btn {
+  width: 30px;
+  height: 30px;
+}
+.lesson-item-actions .icon-btn svg {
+  width: 14px;
+  height: 14px;
+}
+.lesson-item-actions .is-danger {
+  color: var(--danger);
+}
+.lesson-template-detail > header,
+.lesson-reasons > header {
+  flex-wrap: wrap;
+}
+.lesson-template-detail > header > div:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.lesson-report-stats {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+/* Yangi modul modallari loyiha modal dizaynidan foydalanadi. */
+.modal > .modal-form {
+  display: grid;
+  gap: 16px;
+  padding: 20px 22px 22px;
+}
+.modal > .modal-form > label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+.modal > .modal-form > label > input,
+.modal > .modal-form > label > textarea,
+.modal > .modal-form > label > .app-select {
+  width: 100%;
+  min-width: 0;
+}
+.modal > .modal-form > footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin: 4px -22px -22px;
+  padding: 16px 22px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.lesson-guide {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 20px 22px 22px;
+}
+.lesson-guide section {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 15px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-secondary);
+}
+.lesson-guide section > b {
+  display: grid;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--background);
+  background: var(--text-primary);
+}
+.lesson-guide h3 {
+  margin: 1px 0 5px;
+  font-size: 14px;
+}
+.lesson-guide p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.lesson-guide footer {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+@media (max-width: 980px) {
+  .lesson-template-list {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .lesson-template-list::-webkit-scrollbar {
+    display: none;
+  }
+  .lesson-template-list > header {
+    min-width: 100%;
+  }
+  .lesson-template-list > button {
+    min-width: 210px;
+  }
+  .group-plan-form {
+    grid-template-columns: 1fr 1fr;
+  }
+  .group-plan-form .btn {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 720px) {
+  .lesson-plan-panel {
+    margin-top: 16px;
+    padding: 14px;
+    border-radius: 14px;
+  }
+  .lesson-plan-head,
+  .lesson-plan-item__main,
+  .lesson-plan-footer {
+    flex-direction: column;
+  }
+  .lesson-plan-item {
+    padding: 13px;
+  }
+  .lesson-plan-item__main {
+    gap: 8px;
+  }
+  .carry-badge {
+    white-space: normal;
+  }
+  .lesson-statuses {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .lesson-statuses button {
+    min-height: 44px;
+    justify-content: center;
+    padding: 9px 7px;
+  }
+  .lesson-item-fields {
+    grid-template-columns: 1fr;
+  }
+  .lesson-carry-check {
+    min-height: 44px;
+    padding: 8px 0;
+  }
+  .lesson-custom-item {
+    flex-direction: column;
+  }
+  .lesson-custom-item .btn,
+  .lesson-plan-footer .btn {
+    width: 100%;
+    min-height: 44px;
+  }
+  .lesson-template-detail > header > div:last-child,
+  .lesson-template-detail > header > div:last-child .btn {
+    width: 100%;
+  }
+  .lesson-template-detail > header > div:last-child .btn {
+    justify-content: center;
+  }
+  .group-plan-form {
+    grid-template-columns: 1fr;
+  }
+  .report-filters {
+    display: grid;
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+  .report-filters > label,
+  .report-filters > button {
+    width: 100%;
+    min-width: 0;
+  }
+  .modal-backdrop {
+    align-items: end;
+    padding: 0;
+  }
+  .modal {
+    width: 100%;
+    max-height: min(92dvh, 760px);
+    border-radius: 20px 20px 0 0;
+    overscroll-behavior: contain;
+  }
+  .modal__header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    height: auto;
+    min-height: 68px;
+    padding: 12px 16px;
+    background: var(--surface);
+  }
+  .modal__header h2 {
+    font-size: 19px;
+  }
+  .modal__header .icon-btn {
+    flex: 0 0 42px;
+    width: 42px;
+    height: 42px;
+  }
+  .modal > .modal-form {
+    padding: 16px;
+  }
+  .modal > .modal-form > footer {
+    margin: 2px -16px -16px;
+    padding: 14px 16px;
+  }
+  .modal > .modal-form > footer .btn {
+    flex: 1;
+    min-height: 44px;
+  }
+  .lesson-guide {
+    grid-template-columns: 1fr;
+    padding: 16px;
+  }
+  .lesson-guide footer {
+    position: sticky;
+    bottom: -16px;
+    margin: 0 -16px -16px;
+    padding: 14px 16px;
+    background: var(--surface);
+  }
+  .lesson-guide footer .btn {
+    width: 100%;
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 520px) {
+  .lesson-days {
+    grid-template-columns: 1fr;
+  }
+  .lesson-report-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+  .lesson-template-list > button {
+    min-width: 180px;
+  }
+  .lesson-statuses {
+    grid-template-columns: 1fr;
+  }
+  .lesson-day > div {
+    grid-template-columns: 1fr;
+  }
+  .lesson-item-actions {
+    grid-column: 1;
+    grid-row: auto;
+    justify-content: flex-end;
+    border-top: 1px solid var(--border);
+    padding-top: 7px;
+  }
+  .lesson-plan-head h3 {
+    font-size: 18px;
+  }
+  .lesson-reasons > header .btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .modal > .modal-form > footer {
+    flex-direction: column-reverse;
+  }
+  .modal > .modal-form > footer .btn {
+    width: 100%;
+  }
+}

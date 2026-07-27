@@ -26,11 +26,14 @@ const schema = z
   })
   .passthrough()
   .superRefine((v, ctx) => {
-    if (v.enrollmentType === "individual" && v.scheduleDays?.length !== 3)
+    if (
+      v.enrollmentType === "individual" &&
+      (!v.scheduleDays || v.scheduleDays.length < 2 || v.scheduleDays.length > 3)
+    )
       ctx.addIssue({
         code: "custom",
         path: ["scheduleDays"],
-        message: "Individual uchun haftaning 3 kunini tanlang",
+        message: "Individual uchun haftaning 2 yoki 3 kunini tanlang",
       });
     if (v.enrollmentType === "individual" && !v.lessonTime)
       ctx.addIssue({
@@ -125,7 +128,7 @@ export function StudentForm({ open, onClose, student }) {
     });
     if (value === "individual") {
       setValue("groupId", "", { shouldDirty: true, shouldValidate: true });
-      if ((watch("scheduleDays") || []).length !== 3)
+      if ((watch("scheduleDays") || []).length < 2)
         setValue("scheduleDays", [1, 3, 5], { shouldDirty: true });
       setFee(settings.defaultIndividualFee);
     } else setFee(settings.defaultGroupFee);
@@ -232,7 +235,7 @@ export function StudentForm({ open, onClose, student }) {
         {type === "individual" ? (
           <div className="span-2 schedule-field">
             <span>
-              Dars kunlari — 3 kunni tanlang (
+              Dars kunlari — 2 yoki 3 kunni tanlang (
               {(watch("scheduleDays") || []).length}/3)
             </span>
             <div className="schedule-days">
@@ -255,7 +258,13 @@ export function StudentForm({ open, onClose, student }) {
                       const current = watch("scheduleDays") || [];
                       const next = selected
                         ? current.filter((x) => x !== day)
-                        : [...current, day].sort();
+                        : current.length < 3
+                          ? [...current, day].sort()
+                          : current;
+                      if (!selected && current.length >= 3) {
+                        toast.error("Ko‘pi bilan 3 kun tanlash mumkin");
+                        return;
+                      }
                       setValue("scheduleDays", next, {
                         shouldDirty: true,
                         shouldValidate: true,
