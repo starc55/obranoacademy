@@ -10,7 +10,7 @@ const fileSize = (bytes) =>
     : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 const MAX_UPLOAD_MB = Number(import.meta.env.VITE_FILE_UPLOAD_MAX_MB) || 10,
   MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024,
-  MAX_FILE_COUNT = 30;
+  MAX_FILE_COUNT = 10;
 
 export function SubmissionModal({ open, onClose, onCreated, submission = null }) {
   const [loading, setLoading] = useState(false);
@@ -60,13 +60,13 @@ export function SubmissionModal({ open, onClose, onCreated, submission = null })
     const incoming = Array.from(selected || []);
     setFiles((current) => {
       const next = [...current, ...incoming],
-        totalBytes = next.reduce((total, file) => total + file.size, 0);
+        oversized = next.find((file) => file.size > MAX_UPLOAD_BYTES);
       if (next.length > MAX_FILE_COUNT) {
         toast.error(`Bir urinishda ko‘pi bilan ${MAX_FILE_COUNT} ta fayl tanlang`);
         return current;
       }
-      if (totalBytes > MAX_UPLOAD_BYTES) {
-        toast.error(`Tanlangan fayllarning jami hajmi ${MAX_UPLOAD_MB} MB dan oshmasin`);
+      if (oversized) {
+        toast.error(`Har bir fayl hajmi ${MAX_UPLOAD_MB} MB dan oshmasin`);
         return current;
       }
       return next;
@@ -151,7 +151,7 @@ export function SubmissionModal({ open, onClose, onCreated, submission = null })
                   : "Fayllar yoki rasmlarni tanlang"}
               </strong>
               <small>
-                Ko‘pi bilan {MAX_FILE_COUNT} ta, jami {MAX_UPLOAD_MB} MB
+                Ko‘pi bilan {MAX_FILE_COUNT} ta, har biri {MAX_UPLOAD_MB} MB
               </small>
             </span>
           </button>

@@ -12,6 +12,9 @@
     "dev:web": "vite",
     "dev:api": "npm --prefix server run dev",
     "start": "npm --prefix server start",
+    "setup:storage": "npm --prefix server run setup:storage",
+    "migrate:submission-files": "npm --prefix server run migrate:submission-files --",
+    "cleanup:submission-file-content": "npm --prefix server run cleanup:submission-file-content --",
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint ."

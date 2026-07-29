@@ -97,14 +97,21 @@ export function StudentSubmissionDetailPage() {
               </a>
             ))}
             {files.map((file) => (
-              <button
-                type="button"
-                key={file.id}
-                onClick={() => download(file.url, file.name)}
-              >
-                <Download />
-                {file.name}
-              </button>
+              file.available ? (
+                <button
+                  type="button"
+                  key={file.id}
+                  onClick={() => download(file.url, file.name)}
+                >
+                  <Download />
+                  {file.name}
+                </button>
+              ) : (
+                <span className="submission-file-unavailable" key={file.id}>
+                  <Paperclip />
+                  {file.name} — Eski fayl saqlanmagan
+                </span>
+              )
             ))}
             {!files.length && item.hasFile && (
               <button

@@ -238,22 +238,30 @@ export function AdminSubmissionsPage() {
                   )}
                   {(selected.files || []).map((file) => (
                     <span className="admin-file-actions" key={file.id}>
-                      <button
-                        type="button"
-                        className="btn"
-                        onClick={() => previewFile(file)}
-                      >
-                        <Eye />
-                        {file.name}
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-btn"
-                        aria-label={`${file.name} faylini yuklab olish`}
-                        onClick={() => download(file.url, file.name)}
-                      >
-                        <Download />
-                      </button>
+                      {file.available ? (
+                        <>
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={() => previewFile(file)}
+                          >
+                            <Eye />
+                            {file.name}
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            aria-label={`${file.name} faylini yuklab olish`}
+                            onClick={() => download(file.url, file.name)}
+                          >
+                            <Download />
+                          </button>
+                        </>
+                      ) : (
+                        <span className="submission-file-unavailable">
+                          {file.name} — Eski fayl saqlanmagan
+                        </span>
+                      )}
                     </span>
                   ))}
                   {!selected.files?.length && selected.hasFile && (

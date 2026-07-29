@@ -67,11 +67,14 @@ const request = (url, options = {}) =>
             403: "Bu amal uchun ruxsat yo‘q",
             404: "So‘ralgan API endpoint topilmadi",
             409: "Ma’lumotlar to‘qnashuvi yuz berdi",
+            410: "Eski fayl saqlanmagan",
             413: "Yuklanayotgan fayllar hajmi juda katta",
+            415: "Bu fayl turi qo‘llab-quvvatlanmaydi",
             429: "Juda ko‘p urinish. Birozdan keyin qayta urinib ko‘ring",
             500: "Server ma’lumotni saqlay olmadi",
             502: "Server vaqtincha javob bermayapti",
             503: "Server vaqtincha mavjud emas",
+            507: "Server xotirasida joy yetarli emas",
           },
           safeServerText =
             responseText &&
@@ -164,7 +167,9 @@ export async function saveSettings(settings) {
   });
 }
 export async function fetchFileBlob(url) {
-  const response = await fetch(`${API_URL}${url}`, {
+  const resolved = url.endsWith("/url") ? await request(url) : { url };
+  const target = resolved.legacy ? `${API_URL}${resolved.url}` : resolved.url;
+  const response = await fetch(target, {
     headers: localStorage.getItem(SESSION_KEY)
       ? { Authorization: `Bearer ${localStorage.getItem(SESSION_KEY)}` }
       : {},
@@ -173,7 +178,9 @@ export async function fetchFileBlob(url) {
   return response.blob();
 }
 export async function download(url, fileName = "download") {
-  const response = await fetch(`${API_URL}${url}`, {
+  const resolved = url.endsWith("/url") ? await request(url) : { url };
+  const target = resolved.legacy ? `${API_URL}${resolved.url}` : resolved.url;
+  const response = await fetch(target, {
     headers: localStorage.getItem(SESSION_KEY)
       ? { Authorization: `Bearer ${localStorage.getItem(SESSION_KEY)}` }
       : {},
