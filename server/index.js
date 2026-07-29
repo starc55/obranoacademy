@@ -2884,6 +2884,35 @@ app.get(
     }
   }
 );
+app.delete(
+  "/api/admin/submissions/:id",
+  requireRole("ADMIN"),
+  async (req, res, next) => {
+    try {
+      const files =
+        await sql`select storage_path from submission_files where submission_id=${req.params.id}`;
+      const rows = await sql.transaction([
+        sql`delete from notifications where related_url in (${`/submissions/${req.params.id}`},${`/student/submissions/${req.params.id}`})`,
+        sql`delete from student_progress_events where metadata->>'submissionId'=${req.params.id}`,
+        sql`delete from achievements where submission_id=${req.params.id}`,
+        sql`delete from submissions where id=${req.params.id} returning id`,
+      ]);
+      const deleted = rows.at(-1);
+      if (!deleted.length)
+        return res.status(404).json({ error: "Vazifa topilmadi" });
+      deleteFiles(files.map((file) => file.storage_path)).catch((error) =>
+        console.error("[storage:orphan-cleanup]", {
+          operation: "admin-submission-delete",
+          submissionId: req.params.id,
+          code: error.code,
+        })
+      );
+      res.status(204).end();
+    } catch (e) {
+      next(e);
+    }
+  }
+);
 app.patch(
   "/api/admin/submissions/:id/review",
   requireRole("ADMIN"),

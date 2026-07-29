@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { Search, ClipboardCheck, Download, Eye } from "lucide-react";
+import { Search, ClipboardCheck, Download, Eye, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppSelect } from "../components/ui/AppSelect";
 import { Modal } from "../components/ui/Modal";
+import { useConfirm } from "../components/ui/ConfirmDialog";
 import { download, fetchFileBlob, request } from "../services/storage";
 const labels = {
   SUBMITTED: "Yuborildi",
@@ -12,6 +13,7 @@ const labels = {
   REJECTED: "Rad etildi",
 };
 export function AdminSubmissionsPage() {
+  const confirmAction = useConfirm();
   const [data, setData] = useState({ items: [], total: 0, pages: 1 }),
     [q, setQ] = useState(""),
     [status, setStatus] = useState(""),
@@ -20,6 +22,7 @@ export function AdminSubmissionsPage() {
     [selected, setSelected] = useState(null),
     [preview, setPreview] = useState(null),
     [saving, setSaving] = useState(false),
+    [deleting, setDeleting] = useState(false),
     [error, setError] = useState("");
   const load = useCallback(
     () =>
@@ -89,6 +92,30 @@ export function AdminSubmissionsPage() {
       /*toast*/
     } finally {
       setSaving(false);
+    }
+  };
+  const removeSubmission = async () => {
+    if (
+      !(await confirmAction({
+        title: "Vazifani o‘chirish",
+        message: `${selected.studentName} yuborgan “${selected.title}” vazifasi butunlay o‘chirilsinmi?`,
+        confirmText: "O‘chirish",
+        danger: true,
+      }))
+    )
+      return;
+    setDeleting(true);
+    try {
+      await request(`/api/admin/submissions/${selected.id}`, {
+        method: "DELETE",
+      });
+      toast.success("Vazifa o‘chirildi");
+      closeReview();
+      await load();
+    } catch {
+      /* request toast */
+    } finally {
+      setDeleting(false);
     }
   };
   const counts = data.counts || {
@@ -339,6 +366,15 @@ export function AdminSubmissionsPage() {
                   />
                 </label>
                 <div className="form-actions span-2">
+                  <button
+                    type="button"
+                    className="btn btn--danger"
+                    disabled={saving || deleting}
+                    onClick={removeSubmission}
+                  >
+                    <Trash2 />
+                    {deleting ? "O‘chirilmoqda..." : "Vazifani o‘chirish"}
+                  </button>
                   <button className="btn btn--primary" disabled={saving}>
                     {saving ? "Saqlanmoqda..." : "Review saqlash"}
                   </button>
