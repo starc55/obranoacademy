@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { Search, ClipboardCheck, Download, Eye, Trash2 } from "lucide-react";
+import {
+  Search,
+  ClipboardCheck,
+  Download,
+  Eye,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { toast } from "sonner";
 import { AppSelect } from "../components/ui/AppSelect";
 import { Modal } from "../components/ui/Modal";
@@ -18,7 +26,7 @@ export function AdminSubmissionsPage() {
     [q, setQ] = useState(""),
     [status, setStatus] = useState(""),
     [period, setPeriod] = useState("all"),
-    [page] = useState(1),
+    [page, setPage] = useState(1),
     [selected, setSelected] = useState(null),
     [preview, setPreview] = useState(null),
     [saving, setSaving] = useState(false),
@@ -45,6 +53,11 @@ export function AdminSubmissionsPage() {
   useEffect(() => {
     load();
   }, [load]);
+  useEffect(() => {
+    if (page > Math.max(1, data.pages || 1)) {
+      setPage(Math.max(1, data.pages || 1));
+    }
+  }, [data.pages, page]);
   const closeReview = () => {
     if (preview?.src) URL.revokeObjectURL(preview.src);
     setPreview(null);
@@ -154,11 +167,20 @@ export function AdminSubmissionsPage() {
             <Search />
             <input
               value={q}
-              onChange={(e) => setQ(e.target.value)}
+              onChange={(e) => {
+                setQ(e.target.value);
+                setPage(1);
+              }}
               placeholder="Student yoki vazifa..."
             />
           </label>
-          <AppSelect value={status} onValueChange={setStatus}>
+          <AppSelect
+            value={status}
+            onValueChange={(value) => {
+              setStatus(value);
+              setPage(1);
+            }}
+          >
             <option value="">Barcha statuslar</option>
             {Object.entries(labels).map(([v, l]) => (
               <option key={v} value={v}>
@@ -166,7 +188,13 @@ export function AdminSubmissionsPage() {
               </option>
             ))}
           </AppSelect>
-          <AppSelect value={period} onValueChange={setPeriod}>
+          <AppSelect
+            value={period}
+            onValueChange={(value) => {
+              setPeriod(value);
+              setPage(1);
+            }}
+          >
             <option value="all">Barcha vaqt</option>
             <option value="today">Bugungi vazifalar</option>
             <option value="7d">Oxirgi 7 kun</option>
@@ -230,6 +258,43 @@ export function AdminSubmissionsPage() {
             <div className="empty">Submission topilmadi</div>
           )}
         </div>
+        <footer className="pagination">
+          <span>
+            {data.total
+              ? `${data.total} tadan ${(page - 1) * 15 + 1}–${Math.min(
+                  page * 15,
+                  data.total
+                )}`
+              : "0 ta vazifa"}
+          </span>
+          <div>
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              aria-label="Oldingi sahifa"
+              title="Oldingi sahifa"
+            >
+              <ChevronLeft />
+            </button>
+            <span>
+              {page} / {Math.max(1, data.pages || 1)}
+            </span>
+            <button
+              type="button"
+              disabled={page >= Math.max(1, data.pages || 1)}
+              onClick={() =>
+                setPage((current) =>
+                  Math.min(Math.max(1, data.pages || 1), current + 1)
+                )
+              }
+              aria-label="Keyingi sahifa"
+              title="Keyingi sahifa"
+            >
+              <ChevronRight />
+            </button>
+          </div>
+        </footer>
       </section>
       <Modal
         open={!!selected}
